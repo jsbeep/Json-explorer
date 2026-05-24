@@ -1,4 +1,6 @@
 import { FileText, Plus, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import InlineSegmentEditor from './InlineSegmentEditor';
 import type { Document } from '../types/explorer';
 import { cn } from '../utils/cn';
 
@@ -32,6 +34,7 @@ interface DocumentListProps {
   onSelectDocument: (doc: Document) => void;
   onRemoveDocument: (id: string) => void;
   onOpenManager: () => void;
+  onAddDocument?: (doc: Document) => void;
 }
 
 export function DocumentList({
@@ -40,7 +43,9 @@ export function DocumentList({
   onSelectDocument,
   onRemoveDocument,
   onOpenManager,
+  onAddDocument,
 }: DocumentListProps) {
+  const [expanded, setExpanded] = useState(false);
   return (
     <section className={styles.card}>
       <div className={styles.title}>
@@ -104,10 +109,25 @@ export function DocumentList({
             );
           })
         )}
-        <button type="button" onClick={onOpenManager} className={cn(styles.skeleton, styles.itemHover)}>
-          <span>Add document or JSON</span>
-          <Plus className="h-4 w-4" />
-        </button>
+        <div className="w-full">
+          <div className={cn('overflow-hidden transition-all duration-300', expanded ? 'max-h-[520px] opacity-100' : 'max-h-0 opacity-0')}>
+            <div className={cn('transform transition-all duration-300', expanded ? 'translate-y-0 opacity-100' : '-translate-y-2 opacity-0')}>
+              <InlineSegmentEditor
+                mode="document"
+                onCancel={() => setExpanded(false)}
+                onSubmitDocument={(doc) => {
+                  onAddDocument?.(doc);
+                }}
+              />
+            </div>
+          </div>
+        </div>
+        {!expanded ? (
+          <button type="button" onClick={() => setExpanded(true)} className={cn(styles.skeleton, styles.itemHover)}>
+            <span>Add document or JSON</span>
+            <Plus className="h-4 w-4" />
+          </button>
+        ) : null}
       </div>
     </section>
   );

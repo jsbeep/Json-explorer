@@ -96,7 +96,7 @@ const mockQueryByCollection: Record<string, QueryResult<Document>> = {
     status: 'ok',
     data: [
       {
-        _id: '664efb9ea1c0c9b439a5f001',
+        _id: { $oid: '664efb9ea1c0c9b439a5f001' },
         title: 'Kickoff update',
         author: 'Jina',
         status: 'live',
@@ -342,6 +342,7 @@ export function ExplorerPage({ catalogs = mockCatalogs, queryResult, className }
                 onRemoveDocument={explorer.removeDocumentById}
                 onOpenJsonPath={explorer.openJsonPath}
                 onUpdateJsonValue={explorer.updateJsonValue}
+                onAddDocument={explorer.addDocument}
                 onOpenManager={() => setManagerOpen(true)}
               />
             </div>
@@ -355,21 +356,14 @@ export function ExplorerPage({ catalogs = mockCatalogs, queryResult, className }
         catalogs={explorer.catalogs}
         activeDatabase={explorer.activeDatabase}
         activeCollection={explorer.activeCollection}
-        activeDocument={explorer.activeDocument}
         documents={explorer.documents}
-        jsonInputs={explorer.jsonInputs}
-        jsonErrors={explorer.jsonErrors}
         onSelectDatabase={explorer.selectDatabase}
         onSelectCollection={explorer.selectCollection}
         onAddDatabase={explorer.addDatabase}
         onRemoveDatabase={explorer.removeDatabase}
         onAddCollection={explorer.addCollection}
         onRemoveCollection={explorer.removeCollection}
-        onRemoveDocument={explorer.removeDocumentById}
-        onAddJsonInput={explorer.addJsonInput}
-        onUpdateJsonInput={explorer.updateJsonInput}
-        onRemoveJsonInput={explorer.removeJsonInput}
-        onSubmitJsonInputs={explorer.submitJsonInputs}
+        onImportJson={explorer.importJsonText}
       />
     </div>
   );

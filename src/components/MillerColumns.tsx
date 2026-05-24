@@ -22,6 +22,7 @@ interface MillerColumnsProps {
   onRemoveDocument: (id: string) => void;
   onOpenJsonPath: (columnDepth: number, segment: JsonPathSegment) => void;
   onUpdateJsonValue: (rootDocumentId: string, path: JsonPathSegment[], value: unknown) => void;
+  onAddDocument?: (doc: Document) => void;
   onOpenManager: () => void;
 }
 
@@ -38,6 +39,7 @@ export function MillerColumns({
   onRemoveDocument,
   onOpenJsonPath,
   onUpdateJsonValue,
+  onAddDocument,
   onOpenManager,
 }: MillerColumnsProps) {
   const visibleColumns = columns.slice(-3);
@@ -54,6 +56,7 @@ export function MillerColumns({
                 activeCollection={activeCollection}
                 onSelectCollection={onSelectCollection}
                 onOpenManager={onOpenManager}
+                onAddDocument={onAddDocument}
               />
             </div>
           );
@@ -67,6 +70,7 @@ export function MillerColumns({
                 onSelectDocument={onSelectDocument}
                 onRemoveDocument={onRemoveDocument}
                 onOpenManager={onOpenManager}
+                onAddDocument={onAddDocument}
               />
             </div>
           );

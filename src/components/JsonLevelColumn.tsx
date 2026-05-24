@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { ChevronRight, FileJson } from 'lucide-react';
+import InlineSegmentEditor from './InlineSegmentEditor';
 import type { Document } from '../types/explorer';
 import type { JsonHighlight, JsonPathSegment } from '../types/explorer-ui';
 import { pathToKey, ROOT_HIGHLIGHT } from '../utils/jsonPath';
 import { cn } from '../utils/cn';
 
 const styles = {
-  card: 'flex h-full min-h-0 flex-col rounded-[8px] border border-slate-200 bg-white overflow-auto shadow-[0_12px_35px_rgba(15,23,42,0.08)] transition',
+  card: 'flex h-full min-h-0 flex-col rounded-[16px] border border-slate-200 bg-white shadow-[0_12px_35px_rgba(15,23,42,0.08)] transition',
   header: 'flex items-center justify-between gap-2 text-sm font-semibold text-slate-900 p-4',
   empty: 'flex flex-1 items-center justify-center rounded-[12px] border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-500',
   list: 'flex flex-1 flex-col space-y-2 overflow-y-auto p-4 pt-1',
@@ -71,7 +72,7 @@ interface JsonValueRowProps {
   isHighlighted: boolean;
   columnDepth: number;
   allowPrimitiveClick: boolean;
-  onOpenPath: (columnDepth: number, segment: JsonPathSegment, primitiveValue?: boolean) => void;
+  onOpenPath: (columnDepth: number, segment: JsonPathSegment) => void;
   onUpdateValue: (rootId: string, path: JsonPathSegment[], value: unknown) => void;
 }
 
@@ -95,8 +96,6 @@ function JsonValueRow({
   useEffect(() => {
     setLocalValue(formatValue(value));
   }, [value]);
-
-  const navigableSegment = allowPrimitiveClick ? path[path.length - 1] ?? segment : segment;
 
   if (isExpandable || isReference) {
     return (
@@ -126,7 +125,7 @@ function JsonValueRow({
     return (
       <button
         type="button"
-        onClick={() => onOpenPath(columnDepth, navigableSegment, true)}
+        onClick={() => onOpenPath(columnDepth, segment)}
         className={cn(styles.row, styles.rowStatic, styles.itemHover, isHighlighted && styles.rowActive)}
       >
         <div className="flex-1">
@@ -196,7 +195,7 @@ interface JsonLevelColumnProps {
   highlight: JsonHighlight;
   allowPrimitiveClick: boolean;
   onOpenManager: () => void;
-  onOpenPath: (columnDepth: number, segment: JsonPathSegment, primitiveValue?: boolean) => void;
+  onOpenPath: (columnDepth: number, segment: JsonPathSegment) => void;
   onUpdateValue: (rootId: string, path: JsonPathSegment[], value: unknown) => void;
 }
 
@@ -213,6 +212,7 @@ export function JsonLevelColumn({
   onOpenPath,
   onUpdateValue,
 }: JsonLevelColumnProps) {
+  const [expanded, setExpanded] = useState(false);
   const entries = Array.isArray(value)
     ? value.map((entry, index) => ({
         label: `[${index}]`,
@@ -284,10 +284,29 @@ export function JsonLevelColumn({
             );
           })
         )}
-        <button type="button" onClick={onOpenManager} className={cn(styles.skeleton, styles.itemHover)}>
-          <span>Add JSON or edit data</span>
-          <span className={styles.badge}>+</span>
-        </button>
+        <div className="w-full">
+          <div className={cn('overflow-hidden transition-all duration-300', expanded ? 'max-h-[520px] opacity-100' : 'max-h-0 opacity-0')}>
+            <div className={cn('transform transition-all duration-300', expanded ? 'translate-y-0 opacity-100' : '-translate-y-2 opacity-0')}>
+              <InlineSegmentEditor
+                mode="field"
+                parentPath={path}
+                rootDocumentId={rootDocumentId}
+                onCancel={() => setExpanded(false)}
+                onSubmitField={(rootId, parent, key, value) => {
+                  const segment = { type: 'key', key } as JsonPathSegment;
+                  onUpdateValue(rootId, [...parent, segment], value);
+                }}
+              />
+            </div>
+          </div>
+
+          {!expanded ? (
+            <button type="button" onClick={() => setExpanded(true)} className={cn(styles.skeleton, styles.itemHover, 'mt-2')}>
+              <span>Add JSON or edit data</span>
+              <span className={styles.badge}>+</span>
+            </button>
+          ) : null}
+        </div>
       </div>
     </section>
   );

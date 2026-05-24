@@ -31,21 +31,14 @@ interface FloatingDataManagerProps {
   catalogs: DbCatalog[];
   activeDatabase: string | null;
   activeCollection: string | null;
-  activeDocument: Document | null;
   documents: Document[];
-  jsonInputs: string[];
-  jsonErrors: string[];
   onSelectDatabase: (database: string) => void;
   onSelectCollection: (collection: string) => void;
   onAddDatabase: (name: string) => void;
   onRemoveDatabase: (name: string) => void;
   onAddCollection: (database: string, name: string) => void;
   onRemoveCollection: (database: string, name: string) => void;
-  onRemoveDocument: (id: string) => void;
-  onAddJsonInput: () => void;
-  onUpdateJsonInput: (index: number, value: string) => void;
-  onRemoveJsonInput: (index: number) => void;
-  onSubmitJsonInputs: () => void;
+  onImportJson: (text: string) => void;
 }
 
 const getDocId = (doc: Document) => {
@@ -61,24 +54,18 @@ export function FloatingDataManager({
   catalogs,
   activeDatabase,
   activeCollection,
-  activeDocument,
-  documents,
-  jsonInputs,
-  jsonErrors,
   onSelectDatabase,
   onSelectCollection,
   onAddDatabase,
   onRemoveDatabase,
   onAddCollection,
   onRemoveCollection,
-  onRemoveDocument,
-  onAddJsonInput,
-  onUpdateJsonInput,
-  onRemoveJsonInput,
-  onSubmitJsonInputs,
+  documents,
+  onImportJson,
 }: FloatingDataManagerProps) {
   const [localDatabase, setLocalDatabase] = useState('');
   const [localCollection, setLocalCollection] = useState('');
+  const [importText, setImportText] = useState('');
 
   const activeDbEntry = useMemo(
     () => catalogs.find((entry) => entry.database === activeDatabase),
@@ -86,9 +73,8 @@ export function FloatingDataManager({
   );
 
   const handleLoadActiveDocument = () => {
-    if (!activeDocument) return;
-    if (jsonInputs.length === 0) onAddJsonInput();
-    onUpdateJsonInput(0, JSON.stringify(activeDocument, null, 2));
+    // keep placeholder compatibility (no-op)
+    return;
   };
 
   return (
@@ -162,7 +148,6 @@ export function FloatingDataManager({
                 </button>
               </div>
             </div>
-
             <div className={styles.section}>
               <div className={styles.sectionTitle}>Collections</div>
               <div className="mt-2 flex flex-wrap gap-2">
@@ -219,113 +204,22 @@ export function FloatingDataManager({
                 </button>
               </div>
             </div>
-
             <div className={styles.section}>
-              <div className={styles.sectionTitle}>Documents</div>
-              <div className="mt-2 space-y-2">
-                {activeCollection ? (
-                  documents.length === 0 ? (
-                    <div className="rounded-[10px] border border-dashed border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
-                      No documents loaded for this collection.
-                    </div>
-                  ) : (
-                    documents.map((doc, index) => {
-                      const id = getDocId(doc);
-                      return (
-                        <div
-                          key={id || `doc-${index}`}
-                          className="flex items-center justify-between rounded-[10px] border border-slate-200 bg-white px-3 py-2 text-xs"
-                        >
-                          <span className="text-slate-600">{id || 'document'}</span>
-                          {id ? (
-                            <button
-                              type="button"
-                              onClick={() => onRemoveDocument(id)}
-                              className="inline-flex items-center gap-1 text-rose-500 hover:text-rose-600"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                              Remove
-                            </button>
-                          ) : null}
-                        </div>
-                      );
-                    })
-                  )
-                ) : (
-                  <div className="rounded-[10px] border border-dashed border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
-                    Select a collection to manage its documents.
-                  </div>
-                )}
+              <div className="flex items-center justify-between">
+                <div className={styles.sectionTitle}>Import / Export</div>
+                <div className="text-xs text-slate-500">Paste large JSON here</div>
               </div>
-            </div>
-
-            <div className={styles.section}>
-              <div className="mb-2 flex items-center justify-between">
-                <div className={styles.sectionTitle}>JSON documents</div>
-                <button
-                  type="button"
-                  onClick={handleLoadActiveDocument}
-                  className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 transition hover:border-emerald-300/60 hover:text-emerald-700"
-                >
-                  <Edit3 className="h-3 w-3" />
-                  Load selected
-                </button>
-              </div>
-
-              <div
-                className={cn(
-                  'space-y-3 overflow-hidden transition-all duration-300',
-                  activeCollection ? 'max-h-[620px] opacity-100' : 'max-h-0 opacity-0'
-                )}
-              >
-                {jsonInputs.map((value, index) => (
-                  <div key={`json-${index}`} className="rounded-[12px] border border-slate-200 bg-white p-2">
-                    <textarea
-                      value={value}
-                      onChange={(event) => onUpdateJsonInput(index, event.target.value)}
-                      className="h-24 w-full resize-none rounded-[10px] border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 focus:border-emerald-400/50 focus:outline-none"
-                    />
-                    {jsonErrors[index] ? (
-                      <div className="mt-2 text-xs text-rose-600">{jsonErrors[index]}</div>
-                    ) : null}
-                    <div className="mt-2 flex justify-end">
-                      <button
-                        type="button"
-                        onClick={() => onRemoveJsonInput(index)}
-                        className={styles.ghost}
-                      >
-                        Remove block
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {!activeCollection ? (
-                <div className="mt-2 flex items-center gap-2 rounded-[10px] border border-dashed border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
-                  <Braces className="h-3 w-3" />
-                  Select a collection to open the JSON editor.
+              <div className="mt-2">
+                <textarea value={importText} onChange={(e) => setImportText(e.target.value)} placeholder="Paste JSON array or object here" className="h-48 w-full resize-y rounded-[8px] border border-slate-200 bg-white px-3 py-2 text-xs font-mono" />
+                <div className="mt-2 flex gap-2">
+                  <button type="button" onClick={() => { onImportJson(importText); }} className={styles.action}>
+                    Import JSON
+                  </button>
+                  <button type="button" onClick={() => setImportText(JSON.stringify(documents ?? [], null, 2))} className="rounded-[10px] border border-slate-200 bg-white px-3 py-2 text-xs">
+                    Export current
+                  </button>
                 </div>
-              ) : null}
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={onAddJsonInput}
-                  className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 transition hover:border-emerald-400/40 hover:text-emerald-700"
-                >
-                  <Plus className="mr-1 inline h-3 w-3" />
-                  Add block
-                </button>
-                <button
-                  type="button"
-                  onClick={onSubmitJsonInputs}
-                  className="rounded-full border border-emerald-500/40 bg-emerald-500/15 px-4 py-1 text-xs font-semibold text-emerald-700 transition hover:scale-[1.02]"
-                >
-                  <Send className="mr-1 inline h-3 w-3" />
-                  Submit JSON
-                </button>
-              </div>
-              <div className="mt-2 text-[11px] text-slate-400">
-                Tip: If the JSON contains an existing _id, it updates that document.
+                <div className="mt-2 text-[11px] text-slate-400">Tip: Importing an array will add multiple documents.</div>
               </div>
             </div>
           </div>

@@ -60,6 +60,8 @@ export interface ExplorerState {
   submitJsonInputs: () => Promise<void>;
   applyChangeResponse: (change: ChangeResponse) => void;
   setQueryResult: (next: QueryResult<Document>) => void;
+  addDocument: (doc: Document) => void;
+  importJsonText: (text: string) => void;
 }
 
 const DEFAULT_JSON_INPUT = `{
@@ -453,6 +455,70 @@ export function useExplorerState(options: ExplorerStateOptions = {}): ExplorerSt
     await options.onInsertDocuments?.(activeCollection, nextDocuments);
   }, [activeCollection, jsonInputs, options]);
 
+  const addDocument = useCallback((doc: Document) => {
+    const nextDoc = ensureDocumentId(doc);
+    setQueryResult((prev) => {
+      if (!prev || prev.status === 'empty') {
+        const next = buildOkResult(activeCollection ?? 'unknown', [nextDoc], 1);
+        const key = collectionKey(activeDatabase, activeCollection);
+        if (key) setCollectionSnapshots((prevSnapshots) => ({ ...prevSnapshots, [key]: next }));
+        return next;
+      }
+      if (prev.status === 'ok' || prev.status === 'partial') {
+        const existing = [...prev.data];
+        const id = normalizeDocumentId(nextDoc);
+        const idx = existing.findIndex((d) => normalizeDocumentId(d) === id);
+        if (idx >= 0) existing[idx] = nextDoc; else existing.unshift(nextDoc);
+        const nextTotal = 'total' in prev && typeof prev.total === 'number' ? prev.total + (idx >= 0 ? 0 : 1) : existing.length;
+        const next: QueryResult<Document> = prev.status === 'partial' ? { ...prev, data: existing } : { ...prev, data: existing, total: nextTotal };
+        const key = collectionKey(activeDatabase, activeCollection);
+        if (key) setCollectionSnapshots((prevSnapshots) => ({ ...prevSnapshots, [key]: next }));
+        return next;
+      }
+      return prev;
+    });
+  }, [activeCollection, activeDatabase]);
+
+  const importJsonText = useCallback((text: string) => {
+    if (!activeCollection) return;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch (err) {
+      return;
+    }
+    const docs: Document[] = [];
+    if (Array.isArray(parsed)) {
+      parsed.forEach((item) => { if (item && typeof item === 'object') docs.push(ensureDocumentId(item as Document)); });
+    } else if (parsed && typeof parsed === 'object') {
+      docs.push(ensureDocumentId(parsed as Document));
+    }
+    if (docs.length === 0) return;
+    setQueryResult((prev) => {
+      if (!prev || prev.status === 'empty') {
+        const next = buildOkResult(activeCollection, docs, docs.length);
+        const key = collectionKey(activeDatabase, activeCollection);
+        if (key) setCollectionSnapshots((prevSnapshots) => ({ ...prevSnapshots, [key]: next }));
+        return next;
+      }
+      if (prev.status === 'ok' || prev.status === 'partial') {
+        const existing = [...prev.data];
+        let addedCount = 0;
+        docs.forEach((doc) => {
+          const id = normalizeDocumentId(doc);
+          const index = existing.findIndex((item) => normalizeDocumentId(item) === id);
+          if (index >= 0) existing[index] = doc; else { existing.unshift(doc); addedCount += 1; }
+        });
+        const nextTotal = 'total' in prev && typeof prev.total === 'number' ? prev.total + addedCount : existing.length;
+        const next: QueryResult<Document> = prev.status === 'partial' ? { ...prev, data: existing } : { ...prev, data: existing, total: nextTotal };
+        const key = collectionKey(activeDatabase, activeCollection);
+        if (key) setCollectionSnapshots((prevSnapshots) => ({ ...prevSnapshots, [key]: next }));
+        return next;
+      }
+      return prev;
+    });
+  }, [activeCollection, activeDatabase]);
+
   const applyChangeResponse = useCallback(
     (change: ChangeResponse) => {
       setQueryResult((prev) => {
@@ -616,5 +682,7 @@ export function useExplorerState(options: ExplorerStateOptions = {}): ExplorerSt
     submitJsonInputs,
     applyChangeResponse,
     setQueryResult,
+    addDocument,
+    importJsonText,
   };
 }
