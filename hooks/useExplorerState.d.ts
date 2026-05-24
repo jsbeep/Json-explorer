@@ -1,0 +1,54 @@
+import { CatalogEntry, ChangeResponse, DbCatalog, Document, QueryResult, ViewScope, WatchRequest } from '../types/explorer';
+import { ExplorerColumn, JsonHighlight, JsonPathSegment } from '../types/explorer-ui';
+type ExplorerPanel = 0 | 1 | 2;
+export interface ExplorerStateOptions {
+    catalogs?: DbCatalog[];
+    queryResult?: QueryResult<Document>;
+    seedQueryByCollection?: Record<string, QueryResult<Document>>;
+    defaultDatabase?: string;
+    defaultCollection?: string;
+    defaultDocumentId?: string;
+    onWatch?: (request: WatchRequest) => void;
+    onInsertDocuments?: (collection: string, docs: Document[]) => Promise<void> | void;
+}
+export interface ExplorerState {
+    catalogs: DbCatalog[];
+    activeDatabase: string | null;
+    activeCollection: string | null;
+    activeCollectionEntry: CatalogEntry | null;
+    queryResult: QueryResult<Document> | null;
+    documents: Document[];
+    documentMap: Map<string, Document>;
+    activeDocument: Document | null;
+    activePanel: ExplorerPanel;
+    viewScope: ViewScope | null;
+    columns: ExplorerColumn[];
+    jsonPath: JsonPathSegment[];
+    breadcrumbSegments: string[];
+    highlight: JsonHighlight;
+    jsonInputs: string[];
+    jsonErrors: string[];
+    selectDatabase: (database: string) => void;
+    selectCollection: (collection: string) => void;
+    selectDocument: (document: Document) => void;
+    setActivePanel: (panel: ExplorerPanel) => void;
+    openJsonPath: (columnDepth: number, segment: JsonPathSegment, primitiveValue?: boolean) => void;
+    setJsonPathDepth: (depth: number) => void;
+    updateJsonValue: (rootDocumentId: string, path: JsonPathSegment[], value: unknown) => void;
+    addDatabase: (name: string) => void;
+    removeDatabase: (name: string) => void;
+    addCollection: (database: string, name: string) => void;
+    removeCollection: (database: string, name: string) => void;
+    removeDocumentById: (id: string) => void;
+    addJsonInput: () => void;
+    updateJsonInput: (index: number, value: string) => void;
+    removeJsonInput: (index: number) => void;
+    submitJsonInputs: () => Promise<void>;
+    applyChangeResponse: (change: ChangeResponse) => void;
+    setQueryResult: (next: QueryResult<Document>) => void;
+    addDocument: (doc: Document) => void;
+    importJsonText: (text: string) => void;
+    checkValidReference: (oid: string) => Document | null;
+}
+export declare function useExplorerState(options?: ExplorerStateOptions): ExplorerState;
+export {};
