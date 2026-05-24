@@ -1,11 +1,11 @@
 {
-  "name": "explorer-ui",
+  "name": "json_explorer",
   "version": "0.1.0",
   "private": false,
   "type": "module",
   "description": "Reusable Data Explorer UI components for MongoDB real-time dashboards.",
-  "main": "dist/explorer-ui.cjs",
-  "module": "dist/explorer-ui.js",
+  "main": "dist/Json_explorer.cjs",
+  "module": "dist/Json_explorer.js",
   "types": "dist/index.d.ts",
   "files": [
     "dist",
@@ -17,8 +17,8 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/explorer-ui.js",
-      "require": "./dist/explorer-ui.cjs"
+      "import": "./dist/Json_explorer.js",
+      "require": "./dist/Json_explorer.cjs"
     },
     "./styles.css": "./dist/style.css"
   },
@@ -26,8 +26,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "deploy": "gh-pages -d dist"
   },
+  "homepage": "https://jsb0315.github.io/Json_explorer/",
   "peerDependencies": {
     "lucide-react": "^0.469.0",
     "react": "^18.3.1",
@@ -45,6 +47,7 @@
     "@types/react-dom": "^18.3.6",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.21",
+    "gh-pages": "^6.3.0",
     "lucide-react": "^0.469.0",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",

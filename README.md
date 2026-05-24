@@ -1,39 +1,38 @@
-# Explorer UI
+<!-- Project README: Json_explorer -->
+### -> https://jsb0315.github.io/Json_explorer/
+![alt text](image.png)
 
-Reusable React + TypeScript component library for MongoDB-style data exploration UIs.
+# JSON Explorer & Editor
+## Miller Column interface · Inline editing · Reference-aware navigation
 
-## What is included
+<aside>
+💡
 
-- `DataExplorer` main container
-- `ExplorerList`
-- `ExplorerItem`
-- `ExplorerHeader`
-- `ExplorerSearch`
-- `ExplorerEmptyState`
-- `ExplorerLoadingState`
+**MongoDB Live Dashboard**
+![1년전 프로토타입](image-1.png)
+1년전 프로토타입
+![FireStore 패널 뷰](image-2.png)
+FireStore 패널 뷰
 
-## Design goals
+하고싶은거:
+https://github.com/jsb0315/Mongolive_legacy 리뉴얼
+    
+- REF: [MongoDB Compass](https://www.mongodb.com/ko-kr/products/tools/compass), [Google Firestore 패널 뷰](https://firebase.google.com/docs/firestore/using-console?hl=ko)
+</aside>
 
-- Importable as a library from external projects
-- Stateless by default and easy to wire to realtime sources
-- Tailwind-based styling with minimal runtime helpers
-- Optional socket-oriented integration surface via types only
+실제 API 연동 전 프론트엔드 - 백엔드 공유 타입 기반으로 더미 JSON 데이터를 구성 <br>
+UI/UX 및 상태 관리를 선제적으로 유닛 테스트
 
-## Development
+<aside>
+💡
 
-```bash
-npm install
-npm run dev
-```
+**환경**
 
-## Build
-
-```bash
-npm run build
-```
-
-The library entry is exported from `src/index.ts`, and the package exposes the built module plus `styles.css` for consumers that need the bundled Tailwind output.
-
-## Realtime usage pattern
-
-Feed new records into the `items` prop from your socket layer. The explorer stays agnostic about the transport and only reacts to the array you pass in.
+- **AI**
+    - **구글 제미나이 3.1 Pro Extended (아끼면서)**
+    - **Copilot Pro - GPT-5.2-Codex**
+- **개발**
+    - **React 18, Vite**
+    - **TypeScript**
+    - **TailwindCSS, Lucide-react**
+</aside>
