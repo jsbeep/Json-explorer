@@ -5,9 +5,9 @@ import { cn } from '../utils/cn';
 import { extractOid } from '../utils/oid';
 
 const styles = {
-  wrapper: 'fixed bottom-6 right-6 z-40 flex flex-col items-end gap-3',
+  wrapper: 'fixed bottom-4 left-4 right-4 z-40 flex flex-col items-end gap-3 sm:bottom-6 sm:left-auto sm:right-6',
   toggle: 'rounded-full border border-emerald-500/50 bg-emerald-500 px-4 py-3 text-sm font-semibold text-white shadow-[0_18px_40px_rgba(16,185,129,0.2)] transition hover:scale-[1.02]',
-  panel: 'w-[360px] max-w-[90vw] rounded-[16px] border border-slate-200 bg-white/95 p-4 shadow-[0_20px_60px_rgba(15,23,42,0.14)] backdrop-blur',
+  panel: 'w-full max-w-[92vw] rounded-[16px] border border-slate-200 bg-white/95 p-4 shadow-[0_20px_60px_rgba(15,23,42,0.14)] backdrop-blur sm:w-[360px] sm:max-w-[90vw]',
   section: 'rounded-[12px] border border-slate-200 bg-slate-50 p-3',
   sectionTitle: 'text-xs font-semibold uppercase tracking-[0.2em] text-slate-500',
   input: 'flex-1 rounded-[10px] border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-400/60 focus:outline-none',
@@ -121,7 +121,7 @@ export function FloatingDataManager({
                   </div>
                 ))}
               </div>
-              <div className="mt-3 flex gap-2">
+              <div className="mt-3 flex flex-wrap gap-2">
                 <input
                   value={localDatabase}
                   onChange={(event) => setLocalDatabase(event.target.value)}
@@ -210,7 +210,7 @@ export function FloatingDataManager({
               </div>
               <div className="mt-2">
                 <textarea value={importText} onChange={(e) => setImportText(e.target.value)} placeholder="Paste JSON array or object here" className={styles.textarea} />
-                <div className="mt-2 flex gap-2">
+                <div className="mt-2 flex flex-wrap gap-2">
                   <button type="button" onClick={() => { onImportJson(importText, activeDocumentId); }} className={styles.action}>
                     Import JSON
                   </button>

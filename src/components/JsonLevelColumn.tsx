@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ChevronRight, FileJson } from 'lucide-react';
-import InlineSegmentEditor from './InlineSegmentEditor';
+import AddInlineSegmentEditor from './AddInlineSegmentEditor';
 import type { Document } from '../types/explorer';
 import type { JsonHighlight, JsonPathSegment } from '../types/explorer-ui';
 import { pathToKey, ROOT_HIGHLIGHT } from '../utils/jsonPath';
@@ -8,7 +8,7 @@ import { cn } from '../utils/cn';
 import { isOidObject } from '../utils/oid';
 
 const styles = {
-  card: 'flex h-full min-h-0 flex-col rounded-[16px] border border-slate-200 bg-white shadow-[0_12px_35px_rgba(15,23,42,0.08)] transition',
+  card: 'flex h-full min-h-0 min-w-0 flex-col rounded-[16px] border border-slate-200 bg-white shadow-[0_12px_35px_rgba(15,23,42,0.08)] transition',
   cardRef: 'border-emerald-200/70 bg-emerald-50/40',
   header: 'flex items-center justify-between gap-2 text-sm font-semibold text-slate-900 p-4',
   headerRef: 'text-emerald-800',
@@ -16,23 +16,23 @@ const styles = {
   headerId: 'text-xs text-slate-400',
   icon: 'h-4 w-4 text-emerald-500',
   iconRef: 'text-emerald-600',
-  empty: 'flex flex-1 items-center justify-center rounded-[12px] border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-500',
+  empty: 'flex flex-1 items-center justify-center rounded-[12px] border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-500 px-4',
   list: 'flex flex-1 flex-col space-y-2 overflow-y-auto p-4 pt-1',
-  row: 'flex w-full items-center justify-between rounded-[12px] border px-3 py-2 text-left text-sm transition',
+  row: 'group flex w-full flex-col items-start justify-between gap-2 rounded-[12px] border px-3 py-2 text-left text-sm transition sm:flex-row sm:items-center',
   rowActive: 'border-emerald-400/60 bg-emerald-50 shadow-[0_0_0_3px_rgba(34,197,94,0.14)]',
   rowInactive: 'border-slate-200 bg-slate-50 text-slate-700 hover:border-emerald-200/60 hover:text-slate-900',
   rowStatic: 'border-slate-200 bg-white',
   itemHover: 'hover:bg-emerald-50/60 hover:border-emerald-200/60',
   badge: 'inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold',
   highlight: 'ring-2 ring-emerald-200/80',
-  skeleton: 'flex w-full items-center justify-between rounded-[12px] border border-dashed border-emerald-200/70 bg-emerald-50/30 px-3 py-3 text-left text-xs text-emerald-700 transition',
+  skeleton: 'flex w-full items-center justify-between rounded-[12px] border border-dashed border-emerald-200/70 bg-emerald-50/30 px-3 py-2 text-left text-xs text-emerald-700 transition sm:py-3',
   rowLeft: 'flex items-center gap-2',
-  rowLabel: 'font-semibold text-slate-800',
-  rowRight: 'flex items-center gap-2 text-xs text-slate-500',
-  rowMeta: 'text-[11px] text-slate-400',
+  rowLabel: 'font-semibold text-slate-800 truncate max-w-[180px] sm:max-w-[240px] md:max-w-[280px] group-focus-within:max-w-none group-focus-within:whitespace-normal group-focus-within:overflow-visible',
+  rowRight: 'flex items-center gap-2 text-xs text-slate-500 sm:shrink-0',
+  rowMeta: 'text-[11px] text-slate-400 truncate max-w-[220px] sm:max-w-none',
   rowPrevious: 'border-emerald-400/60 bg-emerald-50 text-slate-900 shadow-[0_0_0_3px_rgba(34,197,94,0.14)]',
-  inputWrap: 'w-[52%]',
-  inlineInput: 'w-full rounded-[8px] border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 focus:border-emerald-300/70 focus:outline-none',
+  inputWrap: 'w-full sm:w-[52%]',
+  inlineInput: 'w-full truncate rounded-[8px] border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 focus:border-emerald-300/70 focus:outline-none',
   skeletonBadge: 'inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold',
   iconSmall: 'h-4 w-4',
   flexOne: 'flex-1',
@@ -249,6 +249,18 @@ export function JsonLevelColumn({
   onUpdateValue,
 }: JsonLevelColumnProps) {
   const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    const handleCloseAll = () => setExpanded(false);
+    window.addEventListener('inline-editor-close-all', handleCloseAll);
+    return () => window.removeEventListener('inline-editor-close-all', handleCloseAll);
+  }, []);
+
+  const openEditor = () => {
+    window.dispatchEvent(new Event('inline-editor-close-all'));
+    setExpanded(true);
+  };
+
   const isArray = Array.isArray(value);
   const nextArrayIndex = isArray ? value.length : 0;
   const entries = Array.isArray(value)
@@ -325,9 +337,9 @@ export function JsonLevelColumn({
           })
         )}
         <div className="w-full">
-          <div className={cn('overflow-hidden transition-all duration-300', expanded ? 'max-h-[520px] opacity-100' : 'max-h-0 opacity-0')}>
+          <div className={cn('overflow-hidden transition-all duration-300', expanded ? 'max-h-[420px] opacity-100 sm:max-h-[520px]' : 'max-h-0 opacity-0')}>
             <div className={cn('transform transition-all duration-300', expanded ? 'translate-y-0 opacity-100' : '-translate-y-2 opacity-0')}>
-              <InlineSegmentEditor
+              <AddInlineSegmentEditor
                 mode="field"
                 parentPath={path}
                 rootDocumentId={rootDocumentId}
@@ -341,7 +353,7 @@ export function JsonLevelColumn({
           </div>
 
           {!expanded ? (
-            <button type="button" onClick={() => setExpanded(true)} className={cn(styles.skeleton, styles.itemHover, 'mt-2')}>
+            <button type="button" onClick={openEditor} className={cn(styles.skeleton, styles.itemHover, 'mt-2')}>
               <span>Add JSON or edit data</span>
               <span className={styles.badge}>+</span>
             </button>

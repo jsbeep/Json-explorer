@@ -7,12 +7,12 @@ import { createObjectId } from '../utils/objectId';
 import { extractOid, wrapOid } from '../utils/oid';
 
 const styles = {
-  container: 'mt-3 rounded-[10px] border border-slate-200 bg-white p-3',
-  headerRow: 'flex items-center gap-2',
-  keyInput: 'flex-1 rounded-[8px] border border-slate-200 px-2 py-1 text-sm',
+  container: 'mt-3 rounded-[10px] border border-slate-200 bg-white p-2 sm:p-3',
+  headerRow: 'flex flex-col gap-2 sm:flex-row sm:items-center',
+  keyInput: 'w-full rounded-[8px] border border-slate-200 px-2 py-1 text-sm sm:flex-1',
   title: 'text-sm font-semibold text-slate-900',
   badge: 'rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600',
-  typeButton: 'rounded-[8px] border border-slate-200 px-2 py-1 text-xs flex items-center gap-1',
+  typeButton: 'w-full rounded-[8px] border border-slate-200 px-2 py-1 text-xs flex items-center gap-1 sm:w-auto',
   typeButtonDisabled: 'opacity-60',
   typeButtonLabel: 'font-semibold text-sm',
   icon: 'h-4 w-4',
@@ -26,11 +26,11 @@ const styles = {
   valueBlock: 'mt-3',
   select: 'rounded-[8px] border border-slate-200 px-2 py-1 text-sm',
   input: 'w-full rounded-[8px] border border-slate-200 px-2 py-1 text-sm',
-  textarea: 'w-full h-28 rounded-[8px] border border-slate-200 px-2 py-2 text-sm font-mono',
+  textarea: 'w-full h-24 rounded-[8px] border border-slate-200 px-2 py-2 text-sm font-mono sm:h-28',
   error: 'mt-2 text-xs text-rose-600',
-  actions: 'mt-3 flex justify-end gap-2',
-  cancel: 'rounded-[8px] border border-slate-200 px-3 py-1 text-sm',
-  submit: 'rounded-[8px] bg-emerald-500 px-3 py-1 text-sm text-white flex items-center gap-2',
+  actions: 'mt-3 flex flex-wrap items-center justify-end gap-2',
+  cancel: 'w-full rounded-[8px] border border-slate-200 px-3 py-1 text-sm sm:w-auto',
+  submit: 'w-full rounded-[8px] bg-emerald-500 px-3 py-1 text-sm text-white flex items-center gap-2 sm:w-auto',
   expandWrap: 'overflow-hidden transition-all duration-300',
   expandOpen: 'max-h-[520px] opacity-100',
   expandClosed: 'max-h-0 opacity-0',
@@ -64,7 +64,7 @@ interface InlineSegmentEditorProps {
 
 const DEFAULT_DOC_JSON = '{\n  "title": ""\n}';
 
-export function InlineSegmentEditor({
+export function AddInlineSegmentEditor({
   mode,
   parentPath = [],
   parentIsArray = false,
@@ -360,4 +360,4 @@ export function InlineSegmentEditor({
   );
 }
 
-export default InlineSegmentEditor;
+export default AddInlineSegmentEditor;

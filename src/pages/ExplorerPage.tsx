@@ -10,9 +10,9 @@ import { extractOid } from '../utils/oid';
 
 const styles = {
   page: 'h-screen w-screen overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(34,197,94,0.16),_transparent_45%),linear-gradient(180deg,#f8fafc_0%,#ffffff_45%,#f1f5f9_100%)] text-slate-900',
-  container: 'flex h-full flex-col gap-4 px-6 py-6',
-  viewport: 'flex-1 overflow-hidden rounded-[18px] border border-slate-200 bg-white/80 p-4 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur',
-  viewportInner: 'flex h-full flex-col gap-4',
+  container: 'flex h-full flex-col gap-4 px-4 py-4 sm:px-6 sm:py-6',
+  viewport: 'flex-1 overflow-hidden rounded-[18px] border border-slate-200 bg-white/80 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur',
+  viewportInner: 'flex h-full flex-col gap-3 sm:gap-4',
 };
 
 const mockCatalogs: DbCatalog[] = [
