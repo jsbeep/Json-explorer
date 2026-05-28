@@ -6,10 +6,22 @@ import { cn } from '../utils/cn';
 import { createObjectId } from '../utils/objectId';
 import { extractOid, wrapOid } from '../utils/oid';
 
+type EditorValueType = 'string' | 'number' | 'boolean' | 'object' | 'array' | 'objectId' | 'reference' | 'json';
+
+type InitialEditorData = {
+  key?: string;
+  value?: unknown;
+  type?: EditorValueType;
+  document?: Document;
+};
+
 const styles = {
-  container: 'mt-3 rounded-[10px] border border-slate-200 bg-white p-2 sm:p-3',
+  containerBase: 'containerBase rounded-[10px] border p-2 transition sm:p-3',
+  containerAdd: 'border-dashed border-emerald-200/70 bg-emerald-50/20',
+  containerEdit: 'border-emerald-200/80 bg-white shadow-[0_12px_28px_rgba(15,23,42,0.08)]',
   headerRow: 'flex flex-col gap-2 sm:flex-row sm:items-center',
   keyInput: 'w-full rounded-[8px] border border-slate-200 px-2 py-1 text-sm sm:flex-1',
+  keyInputDisabled: 'cursor-not-allowed bg-slate-100 text-slate-500',
   title: 'text-sm font-semibold text-slate-900',
   badge: 'rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600',
   typeButton: 'w-full rounded-[8px] border border-slate-200 px-2 py-1 text-xs flex items-center gap-1 sm:w-auto',
@@ -28,15 +40,10 @@ const styles = {
   input: 'w-full rounded-[8px] border border-slate-200 px-2 py-1 text-sm',
   textarea: 'w-full h-24 rounded-[8px] border border-slate-200 px-2 py-2 text-sm font-mono sm:h-28',
   error: 'mt-2 text-xs text-rose-600',
+  keyError: 'mt-2 text-xs text-red-500',
   actions: 'mt-3 flex flex-wrap items-center justify-end gap-2',
   cancel: 'w-full rounded-[8px] border border-slate-200 px-3 py-1 text-sm sm:w-auto',
   submit: 'w-full rounded-[8px] bg-emerald-500 px-3 py-1 text-sm text-white flex items-center gap-2 sm:w-auto',
-  expandWrap: 'overflow-hidden transition-all duration-300',
-  expandOpen: 'max-h-[520px] opacity-100',
-  expandClosed: 'max-h-0 opacity-0',
-  expandInner: 'transform transition-all duration-300',
-  expandInnerOpen: 'translate-y-0 opacity-100',
-  expandInnerClosed: '-translate-y-2 opacity-0',
 };
 
 const typeOptions = [
@@ -48,7 +55,7 @@ const typeOptions = [
   { key: 'objectId', label: 'ObjectId', icon: Zap, tone: 'text-slate-600' },
   { key: 'reference', label: 'Reference', icon: Link2, tone: 'text-slate-600' },
   { key: 'json', label: 'JSON', icon: Code, tone: 'text-slate-700' },
-];
+] as const;
 
 interface InlineSegmentEditorProps {
   mode: 'collection' | 'document' | 'field';
@@ -56,20 +63,50 @@ interface InlineSegmentEditorProps {
   parentIsArray?: boolean;
   nextArrayIndex?: number;
   rootDocumentId?: string | null;
+  editSegment?: JsonPathSegment | null;
+  isEdit?: boolean;
+  lockKey?: boolean;
+  initialData?: InitialEditorData;
+  existingKeys?: string[];
   onCancel: () => void;
-  onSubmitField?: (rootId: string, path: JsonPathSegment[], segment: JsonPathSegment, value: unknown) => void;
+  onSubmitField?: (
+    rootId: string,
+    path: JsonPathSegment[],
+    segment: JsonPathSegment,
+    value: unknown,
+    nextKey?: string
+  ) => void;
   onSubmitDocument?: (doc: Document) => void;
   onSubmitCollection?: (name: string) => void;
 }
 
-const DEFAULT_DOC_JSON = '{\n  "title": ""\n}';
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === 'object' && !Array.isArray(value);
 
-export function AddInlineSegmentEditor({
+const inferValueType = (value: unknown): EditorValueType => {
+  if (value === null || value === undefined) return 'string';
+  if (Array.isArray(value)) return 'array';
+  if (isPlainObject(value)) {
+    const oid = extractOid(value);
+    if (oid) return 'objectId';
+    return 'object';
+  }
+  if (typeof value === 'boolean') return 'boolean';
+  if (typeof value === 'number') return 'number';
+  return 'string';
+};
+
+export function InlineSegmentEditor({
   mode,
   parentPath = [],
   parentIsArray = false,
   nextArrayIndex = 0,
   rootDocumentId = null,
+  editSegment = null,
+  isEdit = false,
+  lockKey = false,
+  initialData,
+  existingKeys,
   onCancel,
   onSubmitField,
   onSubmitDocument,
@@ -79,36 +116,94 @@ export function AddInlineSegmentEditor({
   const availableTypes = mode === 'field' ? typeOptions : typeOptions.filter((item) => item.key === forcedType);
 
   const [keyName, setKeyName] = useState('');
-  const [selectedType, setSelectedType] = useState(forcedType ?? 'string');
+  const [selectedType, setSelectedType] = useState<EditorValueType>(forcedType ?? 'string');
   const [showTypePanel, setShowTypePanel] = useState(false);
   const [textValue, setTextValue] = useState('');
   const [boolValue, setBoolValue] = useState(true);
   const [numValue, setNumValue] = useState<number | ''>('');
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [docTitle, setDocTitle] = useState('');
-  const [docJson, setDocJson] = useState(DEFAULT_DOC_JSON);
   const [keyError, setKeyError] = useState<string | null>(null);
+  const [baseDocument, setBaseDocument] = useState<Document | null>(null);
+  const [baseValue, setBaseValue] = useState<unknown>(undefined);
 
-  const selected = useMemo(() => availableTypes.find((t) => t.key === selectedType) ?? availableTypes[0], [selectedType, availableTypes]);
+  const selected = useMemo(
+    () => availableTypes.find((t) => t.key === selectedType) ?? availableTypes[0],
+    [selectedType, availableTypes]
+  );
 
   useEffect(() => {
     if (forcedType) setSelectedType(forcedType);
   }, [forcedType]);
 
   useEffect(() => {
-    if (mode !== 'document') return;
-    try {
-      const parsed = JSON.parse(docJson);
-      if (parsed && typeof parsed === 'object') {
-        const title = (parsed as Record<string, unknown>).title;
-        if (typeof title === 'string') setDocTitle(title);
-      }
-    } catch {
-      // ignore invalid JSON
+    if (!initialData) return;
+    if (mode === 'collection') {
+      setKeyName(initialData.key ?? '');
+      return;
     }
-  }, [docJson, mode]);
+    if (mode === 'document') {
+      const doc = initialData.document;
+      setBaseDocument(doc ?? null);
+      if (doc) {
+        const title = typeof doc.title === 'string' ? doc.title : '';
+        setDocTitle(title);
+      }
+      return;
+    }
+
+    const nextKey = initialData.key ?? '';
+    const nextType = initialData.type ?? inferValueType(initialData.value);
+    setKeyName(nextKey);
+    setSelectedType(nextType);
+    setShowTypePanel(false);
+    setBaseValue(initialData.value);
+
+    if (nextType === 'boolean') {
+      setBoolValue(Boolean(initialData.value));
+      return;
+    }
+    if (nextType === 'number') {
+      const numberValue = typeof initialData.value === 'number' ? initialData.value : Number(initialData.value ?? 0);
+      setNumValue(Number.isNaN(numberValue) ? 0 : numberValue);
+      return;
+    }
+    if (nextType === 'objectId') {
+      const oid = extractOid(initialData.value) ?? '';
+      setTextValue(oid);
+      return;
+    }
+    if (nextType === 'reference') {
+      const oid = extractOid(initialData.value) ?? (typeof initialData.value === 'string' ? initialData.value : '');
+      setTextValue(oid);
+      return;
+    }
+    if (nextType === 'object' || nextType === 'array' || nextType === 'json') {
+      if (initialData.value === undefined) {
+        setTextValue('');
+        return;
+      }
+      if (typeof initialData.value === 'string') {
+        setTextValue(initialData.value);
+        return;
+      }
+      try {
+        setTextValue(JSON.stringify(initialData.value, null, 2));
+      } catch {
+        setTextValue('');
+      }
+      return;
+    }
+    setTextValue(typeof initialData.value === 'string' ? initialData.value : String(initialData.value ?? ''));
+  }, [initialData, mode]);
+
+  useEffect(() => {
+    if (mode !== 'document' || initialData?.document) return;
+    setBaseDocument(null);
+  }, [initialData, mode]);
 
   const reset = () => {
+    if (isEdit) return;
     setKeyName('');
     setSelectedType(forcedType ?? 'string');
     setTextValue('');
@@ -116,8 +211,9 @@ export function AddInlineSegmentEditor({
     setNumValue('');
     setJsonError(null);
     setDocTitle('');
-    setDocJson(DEFAULT_DOC_JSON);
     setKeyError(null);
+    setBaseDocument(null);
+    setBaseValue(undefined);
   };
 
   const handleSubmit = () => {
@@ -138,18 +234,14 @@ export function AddInlineSegmentEditor({
 
     if (mode === 'document') {
       if (!onSubmitDocument) return;
-      try {
-        const parsed = JSON.parse(docJson || '{}');
-        const next = parsed && typeof parsed === 'object' ? { ...parsed } as Record<string, unknown> : {};
-        if (docTitle) next.title = docTitle;
-        onSubmitDocument(next as Document);
-        reset();
-        onCancel();
-        return;
-      } catch (err) {
-        setJsonError(err instanceof Error ? err.message : 'Invalid JSON');
-        return;
-      }
+      const nextDoc = {
+        ...(baseDocument ?? {}),
+        title: docTitle,
+      } as Document;
+      onSubmitDocument(nextDoc);
+      reset();
+      onCancel();
+      return;
     }
 
     if (!onSubmitField || !rootDocumentId) return;
@@ -160,13 +252,24 @@ export function AddInlineSegmentEditor({
         setKeyError('Key is required');
         return;
       }
+      const originalKey = editSegment?.type === 'key' ? editSegment.key : null;
+      if (existingKeys?.includes(name) && name !== originalKey) {
+        setKeyError('Key already exists at this level');
+        return;
+      }
     }
 
+    const keyOnlyEdit = isEdit && (selectedType === 'object' || selectedType === 'array' || selectedType === 'reference');
     let value: unknown = null;
-    if (selectedType === 'string') value = textValue;
+    if (keyOnlyEdit) {
+      value = baseValue;
+    } else if (selectedType === 'string') value = textValue;
     else if (selectedType === 'number') value = numValue === '' ? 0 : Number(numValue);
     else if (selectedType === 'boolean') value = boolValue;
-    else if (selectedType === 'objectId') value = wrapOid(createObjectId());
+    else if (selectedType === 'objectId') {
+      const oid = extractOid(textValue.trim());
+      value = wrapOid(oid ?? createObjectId());
+    }
     else if (selectedType === 'reference') {
       const trimmed = textValue.trim();
       let oid = extractOid(trimmed);
@@ -192,11 +295,14 @@ export function AddInlineSegmentEditor({
       }
     }
 
-    const segment = parentIsArray
-      ? ({ type: 'index', index: nextArrayIndex } as JsonPathSegment)
-      : ({ type: 'key', key: keyName.trim() } as JsonPathSegment);
+    const segment = editSegment ?? (
+      parentIsArray
+        ? ({ type: 'index', index: nextArrayIndex } as JsonPathSegment)
+        : ({ type: 'key', key: keyName.trim() } as JsonPathSegment)
+    );
 
-    onSubmitField(rootDocumentId, parentPath, segment, value);
+    const nextKey = !parentIsArray && segment.type === 'key' ? keyName.trim() : undefined;
+    onSubmitField(rootDocumentId, parentPath, segment, value, nextKey);
     reset();
     onCancel();
   };
@@ -205,23 +311,13 @@ export function AddInlineSegmentEditor({
     if (mode === 'document') {
       return (
         <input
-            value={docTitle}
-            onChange={(e) => {
-              const nextTitle = e.target.value;
-              setDocTitle(nextTitle);
-              try {
-                const parsed = JSON.parse(docJson || '{}');
-                if (parsed && typeof parsed === 'object') {
-                  (parsed as Record<string, unknown>).title = nextTitle;
-                  setDocJson(JSON.stringify(parsed, null, 2));
-                }
-              } catch {
-                // ignore invalid JSON while typing
-              }
-            }}
-            placeholder="document title"
-            className={styles.input}
-          />
+          value={docTitle}
+          onChange={(e) => {
+            setDocTitle(e.target.value);
+          }}
+          placeholder="document title"
+          className={styles.input}
+        />
       );
     }
     if (mode === 'collection') {
@@ -230,7 +326,8 @@ export function AddInlineSegmentEditor({
           value={keyName}
           onChange={(e) => setKeyName(e.target.value)}
           placeholder="collection name"
-          className={styles.keyInput}
+          className={cn(styles.keyInput, lockKey && styles.keyInputDisabled)}
+          disabled={lockKey}
         />
       );
     }
@@ -240,7 +337,8 @@ export function AddInlineSegmentEditor({
         value={keyName}
         onChange={(e) => setKeyName(e.target.value)}
         placeholder="key name"
-        className={styles.keyInput}
+        className={cn(styles.keyInput, lockKey && styles.keyInputDisabled)}
+        disabled={lockKey}
       />
     );
   };
@@ -249,8 +347,11 @@ export function AddInlineSegmentEditor({
     <button
       type="button"
       onClick={() => setShowTypePanel((s) => !s)}
-      className={cn(styles.typeButton, forcedType && styles.typeButtonDisabled)}
-      disabled={Boolean(forcedType)}
+      className={cn(
+        styles.typeButton,
+        (forcedType || (isEdit && (selectedType === 'object' || selectedType === 'array' || selectedType === 'reference'))) && styles.typeButtonDisabled
+      )}
+      disabled={Boolean(forcedType) || (isEdit && (selectedType === 'object' || selectedType === 'array' || selectedType === 'reference'))}
     >
       <selected.icon className={cn(styles.icon, selected.tone)} />
       <span className={styles.typeButtonLabel}>{selected.label}</span>
@@ -259,15 +360,11 @@ export function AddInlineSegmentEditor({
 
   const renderValueInput = () => {
     if (mode === 'document') {
-      return (
-        <div className={styles.valueBlock}>
-          <textarea
-            value={docJson}
-            onChange={(e) => setDocJson(e.target.value)}
-            className={styles.textarea}
-          />
-        </div>
-      );
+      return null;
+    }
+
+    if (isEdit && (selectedType === 'object' || selectedType === 'array' || selectedType === 'reference')) {
+      return null;
     }
 
     if (selectedType === 'boolean') {
@@ -314,9 +411,9 @@ export function AddInlineSegmentEditor({
   };
 
   return (
-    <div className={styles.container}>
+    <div className={cn(styles.containerBase, isEdit ? styles.containerEdit : styles.containerAdd)}>
       <div className={styles.headerRow}>
-        {renderTypeSelector()}
+        {mode === 'field' ? renderTypeSelector() : null}
         {renderKeyInput()}
       </div>
 
@@ -346,18 +443,18 @@ export function AddInlineSegmentEditor({
       ) : null}
 
       {renderValueInput()}
-      {keyError ? <div className={styles.error}>{keyError}</div> : null}
+      {keyError ? <div className={styles.keyError}>{keyError}</div> : null}
       {jsonError ? <div className={styles.error}>{jsonError}</div> : null}
 
       <div className={styles.actions}>
         <button type="button" onClick={onCancel} className={styles.cancel}>Cancel</button>
         <button type="button" onClick={handleSubmit} className={styles.submit}>
           <Check className={styles.icon} />
-          Add
+          {isEdit ? 'Save' : 'Add'}
         </button>
       </div>
     </div>
   );
 }
 
-export default AddInlineSegmentEditor;
+export default InlineSegmentEditor;

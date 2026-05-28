@@ -1,6 +1,6 @@
-import { FileText, Plus, Trash2 } from 'lucide-react';
+import { FileText, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import AddInlineSegmentEditor from './AddInlineSegmentEditor';
+import InlineSegmentEditor from './InlineSegmentEditor';
 import type { Document } from '../types/explorer';
 import { cn } from '../utils/cn';
 import { extractOid } from '../utils/oid';
@@ -10,7 +10,6 @@ const styles = {
   title: 'flex items-center gap-2 text-sm font-semibold text-slate-900 p-4',
   item: 'group flex w-full flex-col gap-1 rounded-[12px] border px-3 py-2 text-left text-sm transition',
   meta: 'text-xs text-slate-500',
-  remove: 'inline-flex items-center gap-1 text-xs text-rose-500 transition hover:text-rose-600',
   itemHover: 'hover:bg-emerald-50/60 hover:border-emerald-200/60',
   itemActive: 'border-emerald-400/60 bg-emerald-50 text-slate-900 shadow-[0_0_0_3px_rgba(34,197,94,0.14)]',
   itemInactive: 'border-slate-200 bg-slate-50 text-slate-700 hover:border-emerald-200/60 hover:text-slate-900',
@@ -20,6 +19,9 @@ const styles = {
   rowTop: 'flex flex-wrap items-center justify-between gap-2',
   rowBottom: 'flex flex-wrap items-center justify-between gap-2',
   idBadge: 'text-xs text-slate-500 truncate max-w-[120px] sm:max-w-none group-focus-within:max-w-none group-focus-within:whitespace-normal group-focus-within:overflow-visible',
+  actions: 'ml-auto flex items-center gap-2 opacity-0 transition group-hover:opacity-100',
+  actionBtn: 'rounded-full p-1 text-slate-400 transition hover:text-emerald-600',
+  actionDelete: 'hover:text-rose-500',
   expandedWrap: 'overflow-hidden transition-all duration-300',
   expandedOpen: 'max-h-[420px] opacity-100 sm:max-h-[520px]',
   expandedClosed: 'max-h-0 opacity-0',
@@ -48,6 +50,7 @@ interface DocumentListProps {
   onRemoveDocument: (id: string) => void;
   onOpenManager: () => void;
   onAddDocument?: (doc: Document) => void;
+  onUpdateDocument?: (id: string, doc: Document) => void;
 }
 
 export function DocumentList({
@@ -57,8 +60,10 @@ export function DocumentList({
   onRemoveDocument,
   onOpenManager,
   onAddDocument,
+  onUpdateDocument,
 }: DocumentListProps) {
   const [expanded, setExpanded] = useState(false);
+  const [editingDocumentId, setEditingDocumentId] = useState<string | null>(null);
 
   useEffect(() => {
     const handleCloseAll = () => setExpanded(false);
@@ -68,7 +73,14 @@ export function DocumentList({
 
   const openEditor = () => {
     window.dispatchEvent(new Event('inline-editor-close-all'));
+    setEditingDocumentId(null);
     setExpanded(true);
+  };
+
+  const openEdit = (id: string) => {
+    window.dispatchEvent(new Event('inline-editor-close-all'));
+    setExpanded(false);
+    setEditingDocumentId(id);
   };
 
   return (
@@ -84,6 +96,21 @@ export function DocumentList({
           documents.map((doc, index) => {
             const id = getDocId(doc);
             const isActive = activeDocumentId === id;
+            if (editingDocumentId && editingDocumentId === id) {
+              return (
+                <InlineSegmentEditor
+                  key={id || `edit-doc-${index}`}
+                  mode="document"
+                  isEdit
+                  initialData={{ document: doc }}
+                  onCancel={() => setEditingDocumentId(null)}
+                  onSubmitDocument={(nextDoc) => {
+                    if (id) onUpdateDocument?.(id, nextDoc);
+                    setEditingDocumentId(null);
+                  }}
+                />
+              );
+            }
             return (
               <button
                 key={id || `doc-${index}`}
@@ -106,24 +133,46 @@ export function DocumentList({
                 <div className={styles.rowBottom}>
                   <div className={styles.meta}>Fields: {Object.keys(doc).length}</div>
                   {id ? (
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onRemoveDocument(id);
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault();
+                    <div className={styles.actions}>
+                      {onUpdateDocument ? (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openEdit(id);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              openEdit(id);
+                            }
+                          }}
+                          className={styles.actionBtn}
+                          aria-label="Edit document"
+                        >
+                          <Pencil className={styles.iconSmall} />
+                        </span>
+                      ) : null}
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={(event) => {
+                          event.stopPropagation();
                           onRemoveDocument(id);
-                        }
-                      }}
-                      className={styles.remove}
-                    >
-                      <Trash2 className={styles.iconSmall} />
-                      Remove
-                    </span>
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            onRemoveDocument(id);
+                          }
+                        }}
+                        className={cn(styles.actionBtn, styles.actionDelete)}
+                        aria-label="Delete document"
+                      >
+                        <Trash2 className={styles.iconSmall} />
+                      </span>
+                    </div>
                   ) : null}
                 </div>
               </button>
@@ -133,7 +182,7 @@ export function DocumentList({
         <div className={styles.inlineWrap}>
           <div className={cn(styles.expandedWrap, expanded ? styles.expandedOpen : styles.expandedClosed)}>
             <div className={cn(styles.expandedInner, expanded ? styles.expandedInnerOpen : styles.expandedInnerClosed)}>
-              <AddInlineSegmentEditor
+              <InlineSegmentEditor
                 mode="document"
                 onCancel={() => setExpanded(false)}
                 onSubmitDocument={(doc) => {
@@ -145,7 +194,7 @@ export function DocumentList({
         </div>
         {!expanded ? (
           <button type="button" onClick={openEditor} className={cn(styles.skeleton, styles.itemHover)}>
-            <span>Add document or JSON</span>
+            <span>Add document</span>
             <Plus className={styles.icon} />
           </button>
         ) : null}

@@ -337,11 +337,21 @@ export function ExplorerPage({ catalogs = mockCatalogs, queryResult, className }
                 onRemoveDocument={explorer.removeDocumentById}
                 onOpenJsonPath={explorer.openJsonPath}
                 onUpdateJsonValue={explorer.updateJsonValue}
+                onRemoveJsonValue={explorer.removeJsonValue}
                 onAddDocument={explorer.addDocument}
                 onAddCollection={(name) => {
                   if (!explorer.activeDatabase) return;
                   explorer.addCollection(explorer.activeDatabase, name);
                 }}
+                onRemoveCollection={(name) => {
+                  if (!explorer.activeDatabase) return;
+                  explorer.removeCollection(explorer.activeDatabase, name);
+                }}
+                onRenameCollection={(currentName, nextName) => {
+                  if (!explorer.activeDatabase) return;
+                  explorer.renameCollection(explorer.activeDatabase, currentName, nextName);
+                }}
+                onUpdateDocument={explorer.updateDocumentById}
                 onOpenManager={() => setManagerOpen(true)}
               />
             </div>

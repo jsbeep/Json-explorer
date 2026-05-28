@@ -49,12 +49,15 @@ export interface ExplorerState {
   setActivePanel: (panel: ExplorerPanel) => void;
   openJsonPath: (columnDepth: number, segment: JsonPathSegment, primitiveValue?: boolean) => void;
   setJsonPathDepth: (depth: number) => void;
-  updateJsonValue: (rootDocumentId: string, path: JsonPathSegment[], value: unknown) => void;
+  updateJsonValue: (rootDocumentId: string, path: JsonPathSegment[], value: unknown, nextKey?: string) => void;
+  removeJsonValue: (rootDocumentId: string, path: JsonPathSegment[], segment: JsonPathSegment) => void;
   addDatabase: (name: string) => void;
   removeDatabase: (name: string) => void;
   addCollection: (database: string, name: string) => void;
   removeCollection: (database: string, name: string) => void;
+  renameCollection: (database: string, currentName: string, nextName: string) => void;
   removeDocumentById: (id: string) => void;
+  updateDocumentById: (id: string, doc: Document) => void;
   addJsonInput: () => void;
   updateJsonInput: (index: number, value: string) => void;
   removeJsonInput: (index: number) => void;
@@ -77,6 +80,10 @@ const ensureDocumentId = (doc: Document) => {
   if (current && extractOid(current)) return doc;
   return { ...doc, _id: wrapOid(createObjectId()) };
 };
+
+const hasMeta = (
+  result: QueryResult<Document>
+): result is QueryResult<Document> & { meta: { collection: string } } => 'meta' in result;
 
 const buildOkResult = (collection: string, data: Document[], total?: number): QueryResult<Document> => ({
   status: 'ok',
@@ -123,6 +130,54 @@ const setValueAtPath = (value: unknown, path: JsonPathSegment[], nextValue: unkn
   }
   const base = Array.isArray(value) ? [...value] : [];
   base[head.index] = tail.length === 0 ? nextValue : setValueAtPath(base[head.index], tail, nextValue);
+  return base;
+};
+
+const renameKeyInObject = (
+  base: Record<string, unknown>,
+  oldKey: string,
+  newKey: string,
+  nextValue: unknown
+) => {
+  const next: Record<string, unknown> = {};
+  let replaced = false;
+  Object.entries(base).forEach(([key, value]) => {
+    if (key === oldKey) {
+      next[newKey] = nextValue;
+      replaced = true;
+    } else {
+      next[key] = value;
+    }
+  });
+  if (!replaced) next[newKey] = nextValue;
+  return next;
+};
+
+const removeFromContainer = (value: unknown, segment: JsonPathSegment): unknown => {
+  if (segment.type === 'key' && isPlainObject(value)) {
+    const next = { ...(value as Record<string, unknown>) };
+    delete next[segment.key];
+    return next;
+  }
+  if (segment.type === 'index' && Array.isArray(value)) {
+    const next = [...value];
+    next.splice(segment.index, 1);
+    return next;
+  }
+  return value;
+};
+
+const removeValueAtPath = (value: unknown, path: JsonPathSegment[], segment: JsonPathSegment): unknown => {
+  if (path.length === 0) return removeFromContainer(value, segment);
+  const [head, ...tail] = path;
+  if (head.type === 'reference') return value;
+  if (head.type === 'key') {
+    const base = isPlainObject(value) ? { ...(value as Record<string, unknown>) } : {};
+    base[head.key] = removeValueAtPath(base[head.key], tail, segment);
+    return base;
+  }
+  const base = Array.isArray(value) ? [...value] : [];
+  base[head.index] = removeValueAtPath(base[head.index], tail, segment);
   return base;
 };
 
@@ -358,6 +413,51 @@ export function useExplorerState(options: ExplorerStateOptions = {}): ExplorerSt
     [activeCollection]
   );
 
+  const renameCollection = useCallback(
+    (database: string, currentName: string, nextName: string) => {
+      const trimmed = nextName.trim();
+      if (!trimmed || trimmed === currentName) return;
+      setCatalogs((prev) =>
+        prev.map((entry) => {
+          if (entry.database !== database) return entry;
+          if (entry.collections.some((col) => col.collection.name === trimmed)) return entry;
+          return {
+            ...entry,
+            collections: entry.collections.map((col) =>
+              col.collection.name === currentName
+                ? { ...col, collection: { ...col.collection, name: trimmed } }
+                : col
+            ),
+          };
+        })
+      );
+
+      setActiveCollection((prev) => (prev === currentName ? trimmed : prev));
+
+      setQueryResult((prev) => {
+        if (!prev || !('meta' in prev)) return prev;
+        if (prev.meta.collection !== currentName) return prev;
+        return { ...prev, meta: { ...prev.meta, collection: trimmed } } as QueryResult<Document>;
+      });
+
+      setCollectionSnapshots((prev) => {
+        const next = { ...prev };
+        const fromKey = `${database}::${currentName}`;
+        const toKey = `${database}::${trimmed}`;
+        if (next[fromKey]) {
+          const snapshot = next[fromKey];
+          const updated = hasMeta(snapshot)
+            ? ({ ...snapshot, meta: { ...snapshot.meta, collection: trimmed } } as QueryResult<Document>)
+            : snapshot;
+          next[toKey] = updated;
+          delete next[fromKey];
+        }
+        return next;
+      });
+    },
+    []
+  );
+
   const removeDocumentById = useCallback(
     (id: string) => {
       setQueryResult((prev) => {
@@ -379,6 +479,32 @@ export function useExplorerState(options: ExplorerStateOptions = {}): ExplorerSt
       if (activeDocumentId === id) setActiveDocumentId(null);
     },
     [activeCollection, activeDatabase, activeDocumentId]
+  );
+
+  const updateDocumentById = useCallback(
+    (id: string, doc: Document) => {
+      const ensureId = (nextDoc: Document) => {
+        const nextId = normalizeDocumentId(nextDoc);
+        if (nextId === id) return nextDoc;
+        return { ...nextDoc, _id: wrapOid(id) } as Document;
+      };
+
+      setQueryResult((prev) => {
+        if (!prev || (prev.status !== 'ok' && prev.status !== 'partial')) return prev;
+        const nextData = prev.data.map((entry) =>
+          normalizeDocumentId(entry) === id ? ensureId(doc) : entry
+        );
+        const next: QueryResult<Document> = prev.status === 'partial'
+          ? { ...prev, data: nextData }
+          : { ...prev, data: nextData, total: prev.total ?? nextData.length };
+        const key = collectionKey(activeDatabase, activeCollection);
+        if (key) {
+          setCollectionSnapshots((prevSnapshots) => ({ ...prevSnapshots, [key]: next }));
+        }
+        return next;
+      });
+    },
+    [activeCollection, activeDatabase]
   );
 
   const addJsonInput = useCallback(() => {
@@ -578,15 +704,60 @@ export function useExplorerState(options: ExplorerStateOptions = {}): ExplorerSt
     [activeCollection, activeDatabase, activeDocumentId]
   );
 
-  const updateJsonValue = useCallback((rootDocumentId: string, path: JsonPathSegment[], value: unknown) => {
-    const cleanPath = path.filter((segment) => segment.type !== 'reference');
-    if (!rootDocumentId || cleanPath.length === 0) return;
+  const updateJsonValue = useCallback(
+    (rootDocumentId: string, path: JsonPathSegment[], value: unknown, nextKey?: string) => {
+      const cleanPath = path.filter((segment) => segment.type !== 'reference');
+      if (!rootDocumentId || cleanPath.length === 0) return;
+      const lastSegment = cleanPath[cleanPath.length - 1];
+      const shouldRename =
+        Boolean(nextKey) && lastSegment?.type === 'key' && nextKey !== lastSegment.key;
+      const parentPath = shouldRename ? cleanPath.slice(0, -1) : cleanPath;
+      setQueryResult((prev) => {
+        if (!prev || (prev.status !== 'ok' && prev.status !== 'partial')) return prev;
+        const nextData = prev.data.map((doc) => {
+          const id = normalizeDocumentId(doc);
+          if (id !== rootDocumentId) return doc;
+          if (shouldRename && lastSegment?.type === 'key') {
+            const parentValue = getValueAtPath(doc, parentPath);
+            if (!isPlainObject(parentValue)) return doc;
+            const nextParent = renameKeyInObject(
+              parentValue as Record<string, unknown>,
+              lastSegment.key,
+              nextKey as string,
+              value
+            );
+            const updated = setValueAtPath(doc, parentPath, nextParent);
+            return isPlainObject(updated) ? (updated as Document) : doc;
+          }
+          const updated = setValueAtPath(doc, cleanPath, value);
+          return isPlainObject(updated) ? (updated as Document) : doc;
+        });
+        const next: QueryResult<Document> = prev.status === 'partial'
+          ? { ...prev, data: nextData }
+          : { ...prev, data: nextData, total: prev.total ?? nextData.length };
+        const key = collectionKey(activeDatabase, activeCollection);
+        if (key) {
+          setCollectionSnapshots((prevSnapshots) => ({ ...prevSnapshots, [key]: next }));
+        }
+        return next;
+      });
+      const highlightPath = shouldRename && lastSegment?.type === 'key'
+        ? [...parentPath, { type: 'key', key: nextKey as string } as JsonPathSegment]
+        : cleanPath;
+      setHighlight({ rootId: rootDocumentId, pathKey: pathToKey(highlightPath), timestamp: Date.now() });
+    },
+    [activeCollection, activeDatabase]
+  );
+
+  const removeJsonValue = useCallback((rootDocumentId: string, path: JsonPathSegment[], segment: JsonPathSegment) => {
+    const cleanPath = path.filter((seg) => seg.type !== 'reference');
+    if (!rootDocumentId) return;
     setQueryResult((prev) => {
       if (!prev || (prev.status !== 'ok' && prev.status !== 'partial')) return prev;
       const nextData = prev.data.map((doc) => {
         const id = normalizeDocumentId(doc);
         if (id !== rootDocumentId) return doc;
-        const updated = setValueAtPath(doc, cleanPath, value);
+        const updated = removeValueAtPath(doc, cleanPath, segment);
         return isPlainObject(updated) ? (updated as Document) : doc;
       });
       const next: QueryResult<Document> = prev.status === 'partial'
@@ -598,7 +769,7 @@ export function useExplorerState(options: ExplorerStateOptions = {}): ExplorerSt
       }
       return next;
     });
-    setHighlight({ rootId: rootDocumentId, pathKey: pathToKey(cleanPath), timestamp: Date.now() });
+    setHighlight({ rootId: rootDocumentId, pathKey: pathToKey([...cleanPath, segment]), timestamp: Date.now() });
   }, [activeCollection, activeDatabase]);
 
   const columns = useMemo<ExplorerColumn[]>(() => {
@@ -691,11 +862,14 @@ export function useExplorerState(options: ExplorerStateOptions = {}): ExplorerSt
     openJsonPath,
     setJsonPathDepth,
     updateJsonValue,
+    removeJsonValue,
     addDatabase,
     removeDatabase,
     addCollection,
     removeCollection,
+    renameCollection,
     removeDocumentById,
+    updateDocumentById,
     addJsonInput,
     updateJsonInput,
     removeJsonInput,

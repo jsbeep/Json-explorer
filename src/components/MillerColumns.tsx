@@ -23,9 +23,13 @@ interface MillerColumnsProps {
   onSelectDocument: (doc: Document) => void;
   onRemoveDocument: (id: string) => void;
   onOpenJsonPath: (columnDepth: number, segment: JsonPathSegment, primitiveValue?: boolean) => void;
-  onUpdateJsonValue: (rootDocumentId: string, path: JsonPathSegment[], value: unknown) => void;
+  onUpdateJsonValue: (rootDocumentId: string, path: JsonPathSegment[], value: unknown, nextKey?: string) => void;
+  onRemoveJsonValue: (rootDocumentId: string, path: JsonPathSegment[], segment: JsonPathSegment) => void;
   onAddDocument?: (doc: Document) => void;
   onAddCollection?: (name: string) => void;
+  onRemoveCollection?: (name: string) => void;
+  onRenameCollection?: (currentName: string, nextName: string) => void;
+  onUpdateDocument?: (id: string, doc: Document) => void;
   onOpenManager: () => void;
 }
 
@@ -42,8 +46,12 @@ export function MillerColumns({
   onRemoveDocument,
   onOpenJsonPath,
   onUpdateJsonValue,
+  onRemoveJsonValue,
   onAddDocument,
   onAddCollection,
+  onRemoveCollection,
+  onRenameCollection,
+  onUpdateDocument,
   onOpenManager,
 }: MillerColumnsProps) {
   const visibleColumns = columns.slice(-3);
@@ -61,6 +69,8 @@ export function MillerColumns({
                 onSelectCollection={onSelectCollection}
                 onOpenManager={onOpenManager}
                 onAddCollection={onAddCollection}
+                onRemoveCollection={onRemoveCollection}
+                onRenameCollection={onRenameCollection}
               />
             </div>
           );
@@ -75,6 +85,7 @@ export function MillerColumns({
                 onRemoveDocument={onRemoveDocument}
                 onOpenManager={onOpenManager}
                 onAddDocument={onAddDocument}
+                onUpdateDocument={onUpdateDocument}
               />
             </div>
           );
@@ -95,6 +106,7 @@ export function MillerColumns({
               onOpenManager={onOpenManager}
               onOpenPath={onOpenJsonPath}
               onUpdateValue={onUpdateJsonValue}
+              onRemoveValue={onRemoveJsonValue}
             />
           </div>
         );
