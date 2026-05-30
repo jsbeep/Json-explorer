@@ -4,3 +4,4 @@ dist_*
 .DS_Store
 *.log
 .env
+prompt_*

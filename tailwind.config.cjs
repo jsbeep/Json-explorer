@@ -4,14 +4,15 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        panel: {
-          DEFAULT: '#0b1220',
-          soft: '#111a2d',
-          muted: '#17223b'
+        surface: {
+          DEFAULT: '#ffffff',
+          soft: '#f8fafc',
+          muted: '#eef2f7'
         },
         accent: {
-          DEFAULT: '#57d9ff',
-          strong: '#0ea5e9'
+          DEFAULT: '#22c55e',
+          soft: '#dcfce7',
+          strong: '#16a34a'
         },
         status: {
           online: '#22c55e',
@@ -20,11 +21,11 @@ module.exports = {
         }
       },
       boxShadow: {
-        panel: '0 24px 80px rgba(2, 8, 23, 0.42)',
-        glow: '0 0 0 1px rgba(87, 217, 255, 0.12), 0 20px 60px rgba(14, 165, 233, 0.18)'
+        panel: '0 18px 50px rgba(15, 23, 42, 0.08)',
+        glow: '0 0 0 1px rgba(34, 197, 94, 0.12), 0 16px 36px rgba(34, 197, 94, 0.14)'
       },
       backgroundImage: {
-        'grid-fade': 'radial-gradient(circle at top, rgba(87, 217, 255, 0.16), transparent 42%), linear-gradient(180deg, rgba(15, 23, 42, 0.95), rgba(2, 6, 23, 1))'
+        'grid-fade': 'radial-gradient(circle at top, rgba(34, 197, 94, 0.12), transparent 42%), linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(243, 247, 251, 1))'
       }
     }
   },

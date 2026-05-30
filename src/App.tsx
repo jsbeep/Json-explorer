@@ -1,6 +1,6 @@
 
-import { ExplorerPage } from './pages/ExplorerPage';
+import { Page } from './pages/page';
 
 export function App() {
-  return <ExplorerPage />;
+  return <Page />;
 }
