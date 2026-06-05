@@ -28,7 +28,7 @@ export function ColumnItem({ label, subtitle, meta, selected, disabled, leading,
     const motionProps = { ...(onClick && { whileTap: { scale: 0.985 } }),
         onClick: onClick,
         disabled: disabled,
-        className: `${!selected && isExpandable ? 'bg-gray-100/50' : ''} ${styles.base} ${selected ? styles.selected : styles.unselected} ${disabled ? 'cursor-not-allowed opacity-60' : ''}}` };
+        className: `${!selected && isExpandable ? 'bg-gray-200/20' : ''} ${styles.base} ${selected ? styles.selected : styles.unselected} ${disabled ? 'cursor-not-allowed opacity-60' : ''}}` };
 
 	return (
 		<Component

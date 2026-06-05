@@ -19,7 +19,7 @@ type JsonLevelColumnProps = {
 };
 
 const styles = {
-	column: 'flex h-full min-h-0 flex-col rounded-[18px] border border-slate-200/80 bg-white shadow-panel',
+	column: 'flex h-full min-h-0 flex-col rounded-[18px] border border-slate-200/80 bg-white shadow-sm',
 	header: 'flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3',
 	headerLabel: 'text-sm font-semibold text-slate-900',
 	headerMeta: 'text-xs font-semibold uppercase tracking-[0.18em] text-slate-400',

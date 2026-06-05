@@ -4,16 +4,17 @@ import { useExplorerState } from '../../hooks/useExplorerState';
 import type { ExplorerViewportMode } from '../../types/explorer';
 import { ColumnItem } from './ColumnItem';
 import { JsonLevelColumn } from './JsonLevelColumn';
+import { Breadcrumbs } from './Breadcrumbs';
 
 type MillerColumnsProps = {
 	viewportMode: ExplorerViewportMode;
 };
 
 const styles = {
-	root: '_root flex min-h-0 h-full overflow-hidden rounded-[20px] border border-slate-200/70 bg-white/70 shadow-[0_24px_60px_rgba(15,23,42,0.06)] backdrop-blur',
+	root: '_root flex flex-col min-h-0 h-full overflow-hidden rounded-[20px] border border-slate-200/70 bg-white/70 shadow-[0_24px_60px_rgba(15,23,42,0.06)] backdrop-blur',
 	desktop: '_desktop grid min-h-0 h-full w-full grid-cols-[3fr_3fr_4fr] gap-4 overflow-hidden px-3 py-3',
 	tablet: 'flex h-full min-h-0 w-full gap-4 overflow-x-auto overflow-y-hidden px-1 pb-1',
-	mobileTabs: 'grid grid-cols-3 gap-2 rounded-[16px] border border-slate-200 bg-white p-2 shadow-panel',
+	mobileTabs: 'grid grid-cols-3 gap-2 rounded-[16px] border border-slate-200 bg-white p-2 m-2 shadow-sm',
 	mobileTab: 'rounded-[12px] px-3 py-2 text-sm font-semibold transition',
 	mobileTabActive: 'bg-emerald-50 text-emerald-700 shadow-sm',
 	mobileTabIdle: 'text-slate-500 hover:bg-slate-50 hover:text-slate-800',
@@ -230,7 +231,7 @@ export function MillerColumns({ viewportMode }: MillerColumnsProps) {
 	if (viewportMode === 'mobile') {
 		return (
 			<div className={styles.root}>
-				<div className="flex h-full min-h-0 w-full flex-col gap-3 p-2">
+				
 					<div className={styles.mobileTabs}>
 						{['collections', 'documents', 'json'].map((key) => (
 							<button
@@ -241,7 +242,12 @@ export function MillerColumns({ viewportMode }: MillerColumnsProps) {
 								{key}
 							</button>
 						))}
+						
 					</div>
+			<div className="flex-1 w-full px-2">
+				<Breadcrumbs />
+			</div>
+				<div className="flex h-full min-h-0 w-full flex-col gap-3 p-2">
 					<div className="min-h-0 flex-1 overflow-hidden rounded-[18px]">
 						<AnimatePresence mode="wait">
 							<motion.div
@@ -264,6 +270,9 @@ export function MillerColumns({ viewportMode }: MillerColumnsProps) {
 	if (viewportMode === 'tablet') {
 		return (
 			<div className={styles.root}>
+			<div className="flex-1 w-full p-3 pb-0">
+				<Breadcrumbs />
+			</div>
 				<div className={styles.tablet}>
 					{fullColumns.map((column) => (
 						<div key={column.key} className="h-full min-h-0 w-[24rem] shrink-0 p-2">
@@ -278,6 +287,9 @@ export function MillerColumns({ viewportMode }: MillerColumnsProps) {
 	// desktop: render visible columns (latest 3) with fixed ratio 3:3:4
 	return (
 		<div className={styles.root}>
+			<div className="flex-1 w-full p-3 pb-0">
+				<Breadcrumbs />
+			</div>
 			<div className="h-full w-full min-h-0">
 				<div className="h-full min-h-0">
 					<AnimatePresence mode="popLayout">

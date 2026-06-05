@@ -165,12 +165,38 @@ export type DocumentSummary = {
   updatedAt: number;
 };
 
+// ActivePath: 탐색 스택 엔트리 (비즈니스 로직용)
+export type ActivePathBase = {
+  id: string;                          // AnimatePresence key용 고유 ID
+  columnKind: ExplorerColumnKind;      // 'collections' | 'documents' | 'json'
+  label: string;                       // 컬럼 헤더 표시용
+};
+
+export type NormalActivePath = ActivePathBase & {
+  segmentType: 'normal';
+  database: string;
+  collection?: string;
+  documentId?: string;
+  fieldPath?: string[];                // json depth 탐색 경로
+};
+
+export type ReferenceActivePath = ActivePathBase & {
+  segmentType: 'reference';
+  refOid: string;
+  projectionPath: string[];            // 누적 projection 경로
+  chainIndex: number;                  // 5색 팔레트 인덱스 (% 5)
+};
+
+export type ActivePath = NormalActivePath | ReferenceActivePath;
+
+// ExplorerPathSegment: breadcrumb 단일 조각 (렌더링용)
 export type ExplorerPathSegment = {
-  key: string;
-  label: string;
+  key: string;                         // React key
+  label: string;                       // 표시 텍스트
   kind: 'database' | 'collection' | 'document' | 'field';
-  path: string[];
+  path: string[];                      // 이 조각까지의 전체 경로 (롤백 기준점)
   valueType?: 'object' | 'array' | 'primitive' | 'reference';
+  chainColor?: string;                 // 레퍼런스 체인 hex, 일반 경로는 undefined
 };
 
 export type ExplorerViewportMode = 'desktop' | 'tablet' | 'mobile';
@@ -202,6 +228,11 @@ export type MockSnapshot = {
   updatedAt: number;
 };
 
+export type MutateFieldOp =
+  | { action: 'add'; key: string; value: JsonValue; containerType: 'object' | 'array'; path: string[] }
+  | { action: 'edit'; key: string; nextKey?: string; value: JsonValue; containerType: 'object' | 'array'; path: string[] }
+  | { action: 'delete'; key: string; containerType: 'object' | 'array'; path: string[] };
+
 export type MockMutationRequest =
   | { type: 'createDatabase'; database: Omit<MockDatabaseRecord, 'collections' | 'updatedAt'> & { collections?: Record<string, MockCollectionRecord> } }
   | { type: 'createCollection'; database: string; collection: Omit<MockCollectionRecord, 'documents' | 'updatedAt'> & { documents?: Document[] } }
@@ -212,18 +243,11 @@ export type MockMutationRequest =
       database: string;
       collection: string;
       documentId: string;
-      field: {
-        action: 'add' | 'edit' | 'delete';
-        containerType: 'object' | 'array';
-        path: string[];
-        key?: string;
-        nextKey?: string;
-        value?: JsonValue;
-      };
+      field: MutateFieldOp;
     }
   | { type: 'replaceSnapshot'; snapshot: MockSnapshot };
 
-export type MockMutationResult = {
+export type changedPaths = {
   status: 'ok';
   snapshot: MockSnapshot;
   tracePath: string[];

@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useExplorerState } from '../../hooks/useExplorerState';
 
 const styles = {
-	root: 'flex min-w-0 items-center gap-2 rounded-[16px] border border-slate-200/80 bg-white/95 px-4 py-3 shadow-panel backdrop-blur',
+	root: 'flex min-w-0 items-center gap-2 rounded-[16px] border border-slate-200/80 bg-white/95 px-4 py-3 shadow-sm backdrop-blur',
 	crumb: 'inline-flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-sm font-medium transition',
 	crumbActive: 'bg-emerald-50 text-emerald-700',
 	crumbIdle: 'text-slate-500 hover:bg-slate-50 hover:text-slate-800',

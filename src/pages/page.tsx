@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Header } from '../components/layout/Header';
-import { Breadcrumbs } from '../components/dashboard/Breadcrumbs';
 import { MillerColumns } from '../components/dashboard/MillerColumns';
 import { useExplorerState } from '../hooks/useExplorerState';
 
@@ -57,7 +56,6 @@ export function Page() {
 			<div className={styles.backgroundGlow} />
 			<div className={styles.page}>
 				<Header />
-				<Breadcrumbs />
 				<motion.main
 					initial={{ opacity: 0, y: 12 }}
 					animate={{ opacity: 1, y: 0 }}

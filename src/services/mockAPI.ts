@@ -6,7 +6,7 @@ import type {
 	Document,
 	DocumentSummary,
 	MockMutationRequest,
-	MockMutationResult,
+	changedPaths,
 	MockSnapshot,
 	JsonValue,
 	PermissionContext,
@@ -212,7 +212,7 @@ function deleteAtPath(document: Document, path: string[], key: string) {
 
 export const mockAPI = {
 	async connect(config: ConnectionConfig = {}): Promise<ConnectionResult> {
-		await wait(config.latencyMs);
+		await wait(config.latencyMs);	// 인위적 지연, 실제에선 사용 X
 		const snapshot = readSnapshot();
 		const summaries = getDatabaseSummaries(snapshot);
 		const activeDatabase = config.database && snapshot.databases[config.database] ? config.database : snapshot.activeDatabase;
@@ -244,7 +244,7 @@ export const mockAPI = {
 		return createPermissionContext(database, collection);
 	},
 
-	async mutateData(request: MockMutationRequest): Promise<MockMutationResult> {
+	async mutateData(request: MockMutationRequest): Promise<changedPaths> {
 		await wait();
 		const snapshot = readSnapshot();
 
