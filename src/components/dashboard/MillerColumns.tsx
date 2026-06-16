@@ -1,0 +1,225 @@
+import { useMemo } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import type { UseExplorerStateResult } from '../../hooks/useExplorerState';
+import { CollectionsColumn } from './columns/CollectionsColumn';
+import { DocumentsColumn } from './columns/DocumentsColumn';
+import { JsonLevelColumn } from './columns/JsonLevelColumn';
+import { PlaceholderColumn } from './columns/PlaceholderColumn';
+import type { ActivePath } from '../../types/explorer';
+
+// ── 상수 ──────────────────────────────────────────────────────────────────────
+
+const FLEX_RATIOS = [3, 3, 4] as const;
+
+// ── 애니메이션 variants ────────────────────────────────────────────────────────
+
+const colVariants = {
+  enter: (dir: number) => ({
+    x: dir > 0 ? '60%' : '-60%',
+    opacity: 0,
+    scale: 0.96,
+  }),
+  center: { x: 0, opacity: 1, scale: 1 },
+  exit: (dir: number) => ({
+    x: dir > 0 ? '-40%' : '40%',
+    opacity: 0,
+    scale: 0.94,
+  }),
+};
+
+const spring = { type: 'spring' as const, stiffness: 260, damping: 28 };
+
+const placeholderVariants = {
+  enter: { opacity: 0, scale: 0.9 },
+  center: { opacity: 1, scale: 1 },
+  exit: { opacity: 0, scale: 0.85 },
+};
+
+// ── Props 타입 ────────────────────────────────────────────────────────────────
+
+type MillerColumnsProps = Pick<
+  UseExplorerStateResult,
+  | 'visibleColumns'
+  | 'collections'
+  | 'documents'
+  | 'openDocument'
+  | 'isLoading'
+  | 'changedPaths'
+  | 'editingId'
+  | 'activePaths'
+  | 'selectCollection'
+  | 'selectDocument'
+  | 'pushJsonPath'
+  | 'pushReference'
+  | 'popToIndex'
+  | 'mutate'
+  | 'setEditingId'
+  | 'clearChangedPaths'
+>;
+
+// ── 컴포넌트 ──────────────────────────────────────────────────────────────────
+
+export function MillerColumns({
+  visibleColumns,
+  collections,
+  documents,
+  openDocument,
+  isLoading,
+  changedPaths,
+  editingId,
+  activePaths,
+  selectCollection,
+  selectDocument,
+  pushJsonPath,
+  pushReference,
+  popToIndex,
+  mutate,
+  setEditingId,
+  clearChangedPaths,
+}: MillerColumnsProps) {
+  // 마지막 push 방향 (visibleColumns의 마지막 non-null 컬럼 방향)
+  const direction = useMemo(() => {
+    for (let i = visibleColumns.length - 1; i >= 0; i--) {
+      const col = visibleColumns[i];
+      if (col) return col.comp.direction;
+    }
+    return 1;
+  }, [visibleColumns]);
+
+  // activePaths 전체에서 현재 선택된 collection/document 식별
+  const activeCollectionName = useMemo(() => {
+    const docPath = activePaths.find((p) => p.columnKind === 'documents' && p.kind === 'normal');
+    return docPath?.kind === 'normal' ? docPath.collectionName ?? null : null;
+  }, [activePaths]);
+
+  const activeDocumentOid = useMemo(() => {
+    const jsonPath = activePaths.find((p) => p.columnKind === 'json' && p.kind === 'normal' && !p.projectionPath?.length);
+    return jsonPath?.kind === 'normal' ? jsonPath.documentOid ?? null : null;
+  }, [activePaths]);
+
+  return (
+    <div className="relative flex h-full w-full gap-2 overflow-hidden rounded-2xl p-2">
+      <AnimatePresence initial={false} mode="popLayout" custom={direction}>
+        {visibleColumns.map((col, slotIndex) => {
+          const flex = FLEX_RATIOS[slotIndex];
+          const isPlaceholder = col === null;
+          const key = isPlaceholder ? `ph-${slotIndex}` : `col-${col.comp.id}`;
+
+          return (
+            <motion.div
+              key={key}
+              custom={direction}
+              variants={isPlaceholder ? placeholderVariants : colVariants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              transition={spring}
+              layout
+              style={{ flex, zIndex: 99 - slotIndex }} // 뒤에 나올수록 zIndex 낮게
+              className={[
+                'min-w-0 h-full flex flex-col rounded-2xl overflow-hidden',
+                isPlaceholder
+                  ? 'border border-dashed border-slate-200 opacity-40'
+                  : 'bg-white border border-slate-200/80 shadow-[0_4px_24px_rgba(15,23,42,0.06)]',
+              ].join(' ')}
+            >
+              {isPlaceholder ? (
+                <PlaceholderColumn slotIndex={slotIndex} />
+              ) : (
+                <ColumnContent
+                  col={col}
+                  slotIndex={slotIndex}
+                  collections={collections}
+                  documents={documents}
+                  openDocument={openDocument}
+                  isLoading={isLoading}
+                  changedPaths={changedPaths}
+                  editingId={editingId}
+                  activePaths={activePaths}
+                  activeCollectionName={activeCollectionName}
+                  activeDocumentOid={activeDocumentOid}
+                  selectCollection={selectCollection}
+                  selectDocument={selectDocument}
+                  pushJsonPath={pushJsonPath}
+                  pushReference={pushReference}
+                  popToIndex={popToIndex}
+                  mutate={mutate}
+                  setEditingId={setEditingId}
+                  clearChangedPaths={clearChangedPaths}
+                />
+              )}
+            </motion.div>
+          );
+        })}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ── 컬럼 내용 분기 ────────────────────────────────────────────────────────────
+
+interface ColumnContentProps extends Omit<MillerColumnsProps, 'visibleColumns'> {
+  col: ActivePath;
+  slotIndex: number;
+  activeCollectionName: string | null;
+  activeDocumentOid: string | null;
+}
+
+function ColumnContent({ col, slotIndex, ...rest }: ColumnContentProps) {
+  if (col.columnKind === 'collections') {
+    return (
+      <CollectionsColumn
+        path={col}
+        collections={rest.collections}
+        activeCollectionName={rest.activeCollectionName}
+        isLoading={rest.isLoading}
+        changedPaths={rest.changedPaths}
+        editingId={rest.editingId}
+        onSelectCollection={rest.selectCollection}
+        onMutate={rest.mutate}
+        onSetEditingId={rest.setEditingId}
+      />
+    );
+  }
+
+  if (col.columnKind === 'documents') {
+    return (
+      <DocumentsColumn
+        path={col}
+        documents={rest.documents}
+        activeDocumentOid={rest.activeDocumentOid}
+        isLoading={rest.isLoading}
+        changedPaths={rest.changedPaths}
+        editingId={rest.editingId}
+        activeCollectionName={rest.activeCollectionName}
+        activeDatabaseName={
+          (() => { const cp = rest.activePaths.find((p) => p.columnKind === 'collections'); return cp?.kind === 'normal' ? (cp.databaseName ?? null) : null; })()
+        }
+        onSelectDocument={rest.selectDocument}
+        onMutate={rest.mutate}
+        onSetEditingId={rest.setEditingId}
+      />
+    );
+  }
+
+  return (
+    <JsonLevelColumn
+      path={col}
+      openDocument={rest.openDocument}
+      slotIndex={slotIndex}
+      isLoading={rest.isLoading}
+      changedPaths={rest.changedPaths}
+      editingId={rest.editingId}
+      activePaths={rest.activePaths}
+      activeCollectionName={rest.activeCollectionName}
+      activeDatabaseName={
+        (() => { const cp = rest.activePaths.find((p) => p.columnKind === 'collections'); return cp?.kind === 'normal' ? (cp.databaseName ?? null) : null; })()
+      }
+      onPushJsonPath={rest.pushJsonPath}
+      onPushReference={rest.pushReference}
+      onPopToIndex={rest.popToIndex}
+      onMutate={rest.mutate}
+      onSetEditingId={rest.setEditingId}
+    />
+  );
+}
