@@ -10,8 +10,8 @@ import { FloatingDataManager } from '../components/editors/FloatingDataManager';
 // ── 스타일 ────────────────────────────────────────────────────────────────────
 
 const styles = {
-  root: 'h-screen w-screen overflow-hidden flex flex-col gap-2 p-3 bg-slate-100',
-  fab: 'fixed bottom-5 right-5 z-[101] w-11 h-11 rounded-full bg-[#22c55e] text-white shadow-[0_4px_16px_rgba(34,197,94,0.4)] flex items-center justify-center hover:bg-emerald-600 transition-colors',
+  root: 'h-screen w-screen overflow-hidden flex flex-col gap-2 p-4 bg-slate-100',
+  fab: 'fixed bottom-5 left-5 z-[101] w-11 h-11 rounded-full bg-[#22c55e] text-white shadow-[0_4px_16px_rgba(34,197,94,0.4)] flex items-center justify-center hover:bg-emerald-600 transition-colors',
   toastPositioner: 'fixed bottom-20 left-1/2 z-[101] -translate-x-1/2 flex items-center gap-3',
   toast: 'flex items-center gap-3 px-4 py-2.5 rounded-2xl text-sm font-medium shadow-lg backdrop-blur',
   toastSuccess: 'bg-white border border-slate-200 text-slate-800',
@@ -42,6 +42,7 @@ export default function ExplorerPage() {
     changedPaths,
     editingId,
     toast,
+    uniqueOids,
     visibleColumns,
     breadcrumbs,
     selectDatabase,
@@ -50,7 +51,10 @@ export default function ExplorerPage() {
     pushJsonPath,
     popToIndex,
     pushReference,
+    navigateToReference,
     mutate,
+    registerUniqueOid,
+    unregisterUniqueOid,
     setEditingId,
     clearChangedPaths,
     dismissToast,
@@ -90,8 +94,12 @@ export default function ExplorerPage() {
           selectDocument={selectDocument}
           pushJsonPath={pushJsonPath}
           pushReference={pushReference}
+          navigateToReference={navigateToReference}
           popToIndex={popToIndex}
           mutate={mutate}
+          uniqueOids={uniqueOids}
+          registerUniqueOid={registerUniqueOid}
+          unregisterUniqueOid={unregisterUniqueOid}
           setEditingId={setEditingId}
           clearChangedPaths={clearChangedPaths}
         />

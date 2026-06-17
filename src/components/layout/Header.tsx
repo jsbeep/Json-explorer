@@ -102,7 +102,6 @@ export function Header({
           <div className={styles.wordmark}>
             <div className={styles.titleRow}>
               <span className={styles.title}>MongoLive</span>
-              <span className={styles.mockBadge}>mock</span>
             </div>
             <p className={styles.subtitle}>MongoDB explorer shell</p>
           </div>

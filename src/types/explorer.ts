@@ -29,6 +29,8 @@ export interface MockCollectionRecord {
   description: string;
   documents: Document[];
   updatedAt: number;
+  // DocumentsColumn 목록에 표시할 제목으로 쓸 필드 키 (미지정 시 name → title → OID 순)
+  titleKey?: string;
 }
 
 export interface MockDatabaseRecord {
@@ -76,6 +78,7 @@ export interface CollectionSummary {
   documentCount: number;
   sizeMb: number;
   updatedAt: number;
+  titleKey?: string;
 }
 
 export interface DocumentSummary {
@@ -162,10 +165,28 @@ export type MockMutationRequest =
       };
     }
   | {
+      type: 'renameCollection';
+      database: string;
+      oldName: string;
+      newName: string;
+      label: string;
+    }
+  | {
+      type: 'deleteCollection';
+      database: string;
+      collection: string;
+    }
+  | {
       type: 'upsertDocument';
       database: string;
       collection: string;
       document: Document;
+    }
+  | {
+      type: 'setCollectionTitleKey';
+      database: string;
+      collection: string;
+      titleKey: string;
     }
   | {
       type: 'deleteDocument';
@@ -198,7 +219,7 @@ export interface MockMutationResult {
 export type ColumnKind = 'collections' | 'documents' | 'json';
 
 export interface ActivePathComp {
-  id: string;
+  id: number;
   direction: 1 | -1;
 }
 

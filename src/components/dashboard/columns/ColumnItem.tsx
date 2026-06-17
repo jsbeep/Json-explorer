@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Pencil, Trash2, ChevronRight } from 'lucide-react';
+import { Pencil, ChevronRight } from 'lucide-react';
 import { cn } from '../../../utils/cn';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -63,6 +63,7 @@ export function ColumnItem({
       onMouseLeave={() => setHovered(false)}
       onClick={onSelect}
       whileTap={{ scale: 0.99 }}
+      transition={{ type: 'spring', stiffness: 500, damping: 40 }}
     >
       {/* 선택 인디케이터 — 왼쪽 작은 도트 (border-l 대신) */}
       <AnimatePresence>
@@ -108,34 +109,36 @@ export function ColumnItem({
           </p>
         )}
       </div>
-
-      {/* 오른쪽: [액션 버튼 width 0→auto] [chevron] */}
-      <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-        {hasActions && (
-          <AnimatePresence>
-            {hovered && (
-              <motion.div
-                className="flex items-center gap-1 overflow-hidden"
-                initial={{ width: 0, opacity: 0 }}
-                animate={{ width: 'auto', opacity: 1 }}
-                exit={{ width: 0, opacity: 0 }}
-                transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-              >
-                {onEdit && (
-                  <button
-                    type="button"
-                    className="p-1.5 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
-                    onClick={onEdit}
-                    aria-label={`${label} 편집`}
-                  >
-                    <Pencil size={13} />
-                  </button>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        )}
+      
+      <div className="flex items-center gap-1 shrink-0">
         <ChevronRight size={15} className={isActive ? 'text-emerald-400' : 'text-slate-300'} />
+        {/* 오른쪽: [액션 버튼 width 0→auto] [chevron] */}
+        <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+          {hasActions && (
+            <AnimatePresence>
+              {hovered && (
+                <motion.div
+                  className="flex items-center gap-1 overflow-hidden"
+                  initial={{ width: 0, opacity: 0 }}
+                  animate={{ width: 'auto', opacity: 1 }}
+                  exit={{ width: 0, opacity: 0 }}
+                  transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                >
+                  {onEdit && (
+                    <button
+                      type="button"
+                      className="p-1.5 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+                      onClick={onEdit}
+                      aria-label={`${label} 편집`}
+                    >
+                      <Pencil size={16} />
+                    </button>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          )}
+        </div>
       </div>
     </motion.div>
   );

@@ -20,7 +20,7 @@ import type {
 
 const delay = (ms?: number): Promise<void> =>
   new Promise((resolve) => {
-    globalThis.setTimeout(resolve, ms ?? 50 + Math.random() * 150);
+    globalThis.setTimeout(resolve, ms ?? 50 + Math.random() * 50);
   });
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
@@ -140,16 +140,23 @@ const summarizePreviewValue = (value: JsonValue): string => {
   return '{...}';
 };
 
-const summarizeDocument = (document: Document, updatedAt: number): DocumentSummary => {
-  const titleCandidate = document.title;
-  const nameCandidate = document.name;
+const summarizeDocument = (document: Document, updatedAt: number, titleKey?: string): DocumentSummary => {
   const oid = isBsonObjectId(document._id) ? document._id.$oid : undefined;
-
   let title = oid ? oid.slice(-8) : '[document]';
-  if (typeof nameCandidate === 'string' && nameCandidate.trim().length > 0) {
-    title = nameCandidate;
-  } else if (typeof titleCandidate === 'string' && titleCandidate.trim().length > 0) {
-    title = titleCandidate;
+
+  if (titleKey) {
+    const candidate = document[titleKey];
+    if (typeof candidate === 'string' && candidate.trim().length > 0) {
+      title = candidate;
+    }
+  } else {
+    const nameCandidate = document.name;
+    const titleCandidate = document.title;
+    if (typeof nameCandidate === 'string' && nameCandidate.trim().length > 0) {
+      title = nameCandidate;
+    } else if (typeof titleCandidate === 'string' && titleCandidate.trim().length > 0) {
+      title = titleCandidate;
+    }
   }
 
   const previewParts: string[] = [];
@@ -512,7 +519,7 @@ const updateCollectionTimestamps = (
 };
 
 export const connect = async (config: ConnectionConfig): Promise<ConnectionResult> => {
-  await delay(config.latencyMs);
+  // await delay(config.latencyMs);
 
   const snapshot = getSnapshot();
   const databases = Object.entries(snapshot.databases).map(([databaseName, database]) => getDatabaseSummary(databaseName, database));
@@ -527,7 +534,7 @@ export const connect = async (config: ConnectionConfig): Promise<ConnectionResul
 };
 
 export const getCollections = async (dbId: string): Promise<CollectionSummary[]> => {
-  await delay();
+  // await delay();
 
   if (!dbId) {
     return rejectWith('DB not found');
@@ -546,11 +553,12 @@ export const getCollections = async (dbId: string): Promise<CollectionSummary[]>
     documentCount: collection.documents.length,
     sizeMb: estimateCollectionSizeMb(collection.documents),
     updatedAt: collection.updatedAt,
+    titleKey: collection.titleKey,
   }));
 };
 
 export const getDocuments = async (collectionId: string): Promise<DocumentSummary[]> => {
-  await delay();
+  // await delay();
 
   const snapshot = getSnapshot();
   const location = findCollection(snapshot, collectionId);
@@ -558,11 +566,11 @@ export const getDocuments = async (collectionId: string): Promise<DocumentSummar
     return rejectWith('Collection not found');
   }
 
-  return location.collection.documents.map((document) => summarizeDocument(document, location.collection.updatedAt));
+  return location.collection.documents.map((document) => summarizeDocument(document, location.collection.updatedAt, location.collection.titleKey));
 };
 
 export const mutateData = async (op: MockMutationRequest): Promise<MockMutationResult> => {
-  await delay();
+  // await delay();
 
   const snapshot = cloneCollectionMap(getSnapshot());
   const now = Date.now();
@@ -621,6 +629,94 @@ export const mutateData = async (op: MockMutationRequest): Promise<MockMutationR
         changedPaths: [`databases.${op.database}.collections.${op.collection.name}`],
         tracePath: [op.database, op.collection.name],
         collectionKey: collectionKey(op.database, op.collection.name),
+      };
+    }
+    case 'renameCollection': {
+      const database = snapshot.databases[op.database];
+      if (!database) {
+        return rejectWith('DB not found');
+      }
+
+      const collection = database.collections[op.oldName];
+      if (!collection) {
+        return rejectWith('Collection not found');
+      }
+
+      if (op.newName !== op.oldName && database.collections[op.newName]) {
+        return rejectWith('Collection name already exists');
+      }
+
+      delete database.collections[op.oldName];
+      database.collections[op.newName] = {
+        ...collection,
+        name: op.newName,
+        label: op.label,
+        updatedAt: now,
+      };
+
+      updateCollectionTimestamps(snapshot, op.database, op.newName, now);
+      setSnapshot(snapshot);
+      emitCollectionReplace(op.database, op.newName, database.collections[op.newName].documents);
+
+      return {
+        status: 'ok',
+        snapshot: getSnapshot(),
+        changedPaths: [`databases.${op.database}.collections.${op.newName}`],
+        tracePath: [op.database, op.newName],
+        collectionKey: collectionKey(op.database, op.newName),
+      };
+    }
+    case 'deleteCollection': {
+      const database = snapshot.databases[op.database];
+      if (!database) {
+        return rejectWith('DB not found');
+      }
+
+      if (!database.collections[op.collection]) {
+        return rejectWith('Collection not found');
+      }
+
+      delete database.collections[op.collection];
+      database.updatedAt = now;
+      snapshot.updatedAt = now;
+      setSnapshot(snapshot);
+      emitChange(op.database, op.collection, {
+        type: 'invalidate',
+        database: op.database,
+        collection: op.collection,
+        tracePath: [op.database, op.collection],
+      });
+
+      return {
+        status: 'ok',
+        snapshot: getSnapshot(),
+        changedPaths: [`databases.${op.database}.collections`],
+        tracePath: [op.database],
+        collectionKey: collectionKey(op.database, op.collection),
+      };
+    }
+    case 'setCollectionTitleKey': {
+      const database = snapshot.databases[op.database];
+      if (!database) {
+        return rejectWith('DB not found');
+      }
+
+      const collection = database.collections[op.collection];
+      if (!collection) {
+        return rejectWith('Collection not found');
+      }
+
+      collection.titleKey = op.titleKey.trim() === '' ? undefined : op.titleKey.trim();
+      updateCollectionTimestamps(snapshot, op.database, op.collection, now);
+      setSnapshot(snapshot);
+      emitCollectionReplace(op.database, op.collection, collection.documents);
+
+      return {
+        status: 'ok',
+        snapshot: getSnapshot(),
+        changedPaths: [`databases.${op.database}.collections.${op.collection}`],
+        tracePath: [op.database, op.collection],
+        collectionKey: collectionKey(op.database, op.collection),
       };
     }
     case 'upsertDocument': {
@@ -763,7 +859,7 @@ export const mutateData = async (op: MockMutationRequest): Promise<MockMutationR
 };
 
 export const checkReference = async (oid: string): Promise<boolean> => {
-  await delay();
+  // await delay();
 
   const snapshot = getSnapshot();
   for (const database of Object.values(snapshot.databases)) {
@@ -777,6 +873,31 @@ export const checkReference = async (oid: string): Promise<boolean> => {
   }
 
   return false;
+};
+
+export interface ReferenceInfo {
+  databaseName: string;
+  collectionName: string;
+  collectionLabel: string;
+  documentTitle: string;
+}
+
+export const getReferenceInfo = async (oid: string): Promise<ReferenceInfo | null> => {
+  // await delay();
+
+  const snapshot = getSnapshot();
+  const location = findDocument(snapshot, oid);
+  if (!location) {
+    return null;
+  }
+
+  const summary = summarizeDocument(location.document, location.collection.updatedAt);
+  return {
+    databaseName: location.databaseName,
+    collectionName: location.collectionName,
+    collectionLabel: location.collection.label,
+    documentTitle: summary.title,
+  };
 };
 
 export const subscribeToChanges = (collectionId: string, callback: (change: ChangeResponse) => void): (() => void) => {
@@ -798,7 +919,7 @@ export const subscribeToChanges = (collectionId: string, callback: (change: Chan
 };
 
 export const getDocumentById = async (oid: string, projectionPath?: string[]): Promise<Document> => {
-  await delay();
+  // await delay();
 
   const snapshot = getSnapshot();
   const location = findDocument(snapshot, oid);
@@ -815,7 +936,7 @@ export const getDocumentById = async (oid: string, projectionPath?: string[]): P
 
 // 프로젝션 없이 원본 전체 문서 반환 (로컬 JSON 탐색용)
 export const getFullDocumentById = async (oid: string): Promise<Document> => {
-  await delay();
+  // await delay();
   const snapshot = getSnapshot();
   const location = findDocument(snapshot, oid);
   if (!location) {
@@ -831,6 +952,7 @@ export const mockAPI = {
   getDocuments,
   mutateData,
   checkReference,
+  getReferenceInfo,
   subscribeToChanges,
   getDocumentById,
   getFullDocumentById,

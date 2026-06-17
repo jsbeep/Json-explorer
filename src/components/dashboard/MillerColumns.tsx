@@ -21,7 +21,7 @@ const colVariants = {
   }),
   center: { x: 0, opacity: 1, scale: 1 },
   exit: (dir: number) => ({
-    x: dir > 0 ? '-40%' : '40%',
+    // x: dir > 0 ? '-40%' : '40%',
     opacity: 0,
     scale: 0.94,
   }),
@@ -51,8 +51,12 @@ type MillerColumnsProps = Pick<
   | 'selectDocument'
   | 'pushJsonPath'
   | 'pushReference'
+  | 'navigateToReference'
   | 'popToIndex'
   | 'mutate'
+  | 'uniqueOids'
+  | 'registerUniqueOid'
+  | 'unregisterUniqueOid'
   | 'setEditingId'
   | 'clearChangedPaths'
 >;
@@ -72,8 +76,12 @@ export function MillerColumns({
   selectDocument,
   pushJsonPath,
   pushReference,
+  navigateToReference,
   popToIndex,
   mutate,
+  uniqueOids,
+  registerUniqueOid,
+  unregisterUniqueOid,
   setEditingId,
   clearChangedPaths,
 }: MillerColumnsProps) {
@@ -81,7 +89,9 @@ export function MillerColumns({
   const direction = useMemo(() => {
     for (let i = visibleColumns.length - 1; i >= 0; i--) {
       const col = visibleColumns[i];
-      if (col) return col.comp.direction;
+      if (col) 
+        // if (i === visibleColumns.length - 3) return -col.comp.direction; // 가장 오른쪽 컬럼 방향 우선
+        return col.comp.direction;
     }
     return 1;
   }, [visibleColumns]);
@@ -98,7 +108,7 @@ export function MillerColumns({
   }, [activePaths]);
 
   return (
-    <div className="relative flex h-full w-full gap-2 overflow-hidden rounded-2xl p-2">
+    <div className="relative flex h-full w-full gap-3 overflow-hidden rounded-2xl p-3">
       <AnimatePresence initial={false} mode="popLayout" custom={direction}>
         {visibleColumns.map((col, slotIndex) => {
           const flex = FLEX_RATIOS[slotIndex];
@@ -142,8 +152,12 @@ export function MillerColumns({
                   selectDocument={selectDocument}
                   pushJsonPath={pushJsonPath}
                   pushReference={pushReference}
+                  navigateToReference={navigateToReference}
                   popToIndex={popToIndex}
                   mutate={mutate}
+                  uniqueOids={uniqueOids}
+                  registerUniqueOid={registerUniqueOid}
+                  unregisterUniqueOid={unregisterUniqueOid}
                   setEditingId={setEditingId}
                   clearChangedPaths={clearChangedPaths}
                 />
@@ -187,6 +201,7 @@ function ColumnContent({ col, slotIndex, ...rest }: ColumnContentProps) {
       <DocumentsColumn
         path={col}
         documents={rest.documents}
+        collections={rest.collections}
         activeDocumentOid={rest.activeDocumentOid}
         isLoading={rest.isLoading}
         changedPaths={rest.changedPaths}
@@ -217,8 +232,12 @@ function ColumnContent({ col, slotIndex, ...rest }: ColumnContentProps) {
       }
       onPushJsonPath={rest.pushJsonPath}
       onPushReference={rest.pushReference}
+      onNavigateToReference={rest.navigateToReference}
       onPopToIndex={rest.popToIndex}
       onMutate={rest.mutate}
+      uniqueOids={rest.uniqueOids}
+      onRegisterUniqueOid={rest.registerUniqueOid}
+      onUnregisterUniqueOid={rest.unregisterUniqueOid}
       onSetEditingId={rest.setEditingId}
     />
   );

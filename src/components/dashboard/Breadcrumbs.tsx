@@ -6,13 +6,13 @@ import { ExplorerPathSegment } from '../../types/explorer';
 import { cn } from '../../utils/cn';
 
 const styles = {
-  container: 'flex h-12 min-h-12 items-center overflow-hidden rounded-[14px] m-2 mb-0 border border-slate-200/80 bg-white/80 px-3 shadow-[0_8px_30px_rgba(15,23,42,0.04)] backdrop-blur',
+  container: 'flex h-12 min-h-12 items-center overflow-hidden rounded-[14px] m-3 mb-0 border border-slate-200/80 bg-white/80 px-3 shadow-[0_8px_30px_rgba(15,23,42,0.04)] backdrop-blur',
   track: 'flex w-full items-center gap-0.5 overflow-x-auto whitespace-nowrap scroll-smooth',
   trackScroll: 'scrollbar-hide',
   empty: 'text-[13px] font-medium text-slate-400',
   breadcrumbBase: 'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium transition-colors',
-  breadcrumbHover: 'hover:bg-slate-100 cursor-pointer text-slate-600 hover:text-slate-800',
-  breadcrumbActive: 'bg-slate-100/80 text-slate-900 font-semibold cursor-default',
+  breadcrumbHover: 'hover:bg-slate-100/30 cursor-pointer text-slate-600 hover:text-slate-800',
+  breadcrumbActive: 'bg-slate-100/60 text-slate-900 font-semibold cursor-default',
   icon: 'h-3.5 w-3.5',
   chevron: 'h-3 w-3 shrink-0 text-slate-300',
 } as const;
@@ -75,7 +75,6 @@ export function Breadcrumbs({ breadcrumbs, onNavigate }: BreadcrumbsProps) {
               const referenceStyle = isReference
                 ? { color: segment.chainColor }
                 : undefined;
-
               return (
                 <motion.div
                   key={segment.key}

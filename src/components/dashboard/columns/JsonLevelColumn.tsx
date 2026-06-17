@@ -1,7 +1,8 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { nextPathId } from '../../../hooks/useExplorerState';
 import {
-  ChevronRight, Copy, Check, Braces, List, Link, Plus, Pencil, Hash, ToggleLeft,
+  ChevronRight, Copy, Check, Braces, List, Link, Plus, Pencil, Hash, ToggleLeft, KeyRound
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type {
@@ -12,10 +13,11 @@ import type {
   NormalActivePath,
   ReferenceActivePath,
 } from '../../../types/explorer';
-import { getFullDocumentById, checkReference } from '../../../services/mockAPI';
+import { getFullDocumentById, getReferenceInfo, type ReferenceInfo } from '../../../services/mockAPI';
 import { InlineSegmentEditor } from '../../editors/InlineSegmentEditor';
 import { DeleteConfirmModal } from '../../common/DeleteConfirmModal';
 import { cn } from '../../../utils/cn';
+import { copyToClipboard } from '../../../utils/clipboard';
 
 // ── 타입 헬퍼 ─────────────────────────────────────────────────────────────────
 
@@ -24,16 +26,10 @@ const isBsonOid = (v: JsonValue): v is { $oid: string } =>
   Object.keys(v as object).length === 1 &&
   typeof (v as Record<string, unknown>)['$oid'] === 'string';
 
-const isDBRef = (v: JsonValue): v is { $ref: string; $id: { $oid: string }; $db: string } =>
-  typeof v === 'object' && v !== null && !Array.isArray(v) &&
-  typeof (v as Record<string, unknown>)['$ref'] === 'string' &&
-  isBsonOid((v as Record<string, unknown>)['$id'] as JsonValue);
-
-type JsonFieldType = 'string' | 'number' | 'boolean' | 'null' | 'array' | 'object' | 'oid' | 'dbref';
+type JsonFieldType = 'string' | 'number' | 'boolean' | 'null' | 'array' | 'object' | 'oid';
 
 const getFieldType = (v: JsonValue): JsonFieldType => {
   if (v === null) return 'null';
-  if (isDBRef(v)) return 'dbref';
   if (isBsonOid(v)) return 'oid';
   if (Array.isArray(v)) return 'array';
   if (typeof v === 'object') return 'object';
@@ -71,7 +67,7 @@ function CopyBtn({ text }: { text: string }) {
       className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors shrink-0"
       onClick={(e) => {
         e.stopPropagation();
-        navigator.clipboard.writeText(text).then(() => {
+        copyToClipboard(text).then(() => {
           setCopied(true);
           setTimeout(() => setCopied(false), 1500);
         });
@@ -80,10 +76,10 @@ function CopyBtn({ text }: { text: string }) {
       <AnimatePresence mode="wait" initial={false}>
         {copied
           ? <motion.span key="c" initial={{ scale: 0.5 }} animate={{ scale: 1 }} exit={{ scale: 0.5 }} className="block">
-              <Check size={13} className="text-emerald-500" />
+              <Check size={16} className="text-emerald-500" />
             </motion.span>
           : <motion.span key="d" initial={{ scale: 0.5 }} animate={{ scale: 1 }} exit={{ scale: 0.5 }} className="block">
-              <Copy size={13} />
+              <Copy size={16} />
             </motion.span>
         }
       </AnimatePresence>
@@ -111,7 +107,12 @@ function FieldItem({
   const [hovered, setHovered] = useState(false);
 
   return (
-    <div
+    <motion.div
+      layout
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 35 }}
       className={cn(
         'relative flex items-center gap-3 px-4 py-3.5 rounded-2xl',
         onClick ? 'cursor-pointer hover:bg-slate-50/80 active:bg-slate-100/60' : 'cursor-default',
@@ -122,7 +123,7 @@ function FieldItem({
       onClick={onClick ?? undefined}
     >
       <span className={cn(
-        'text-[13px] py-1.5 font-mono font-medium shrink-0 w-[36%] truncate',
+        'text-[13px] py-1.5 font-mono font-medium shrink-0 w-[20%] truncate',
         isId ? 'text-slate-400' : 'text-slate-500',
       )}>
         {fieldKey}
@@ -132,12 +133,21 @@ function FieldItem({
         {children}
       </div>
 
-      <div className="flex items-center gap-1 shrink-0">
+      <div className="flex items-center shrink-0">
+        {isExpandable && (
+          <motion.span
+            animate={{ x: hovered && isEditable ? 2 : 0 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+            className="mr-1"
+          >
+            <ChevronRight size={15} className="text-slate-300" />
+          </motion.span>
+        )}
         {isEditable && (
           <AnimatePresence>
             {hovered && (
               <motion.div
-                className="flex items-center gap-1 overflow-hidden"
+                className="flex items-center overflow-hidden"
                 initial={{ width: 0, opacity: 0 }}
                 animate={{ width: 'auto', opacity: 1 }}
                 exit={{ width: 0, opacity: 0 }}
@@ -149,22 +159,14 @@ function FieldItem({
                   className="p-1.5 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
                   onClick={onEdit}
                 >
-                  <Pencil size={18} />
+                  <Pencil size={16} />
                 </button>
               </motion.div>
             )}
           </AnimatePresence>
         )}
-        {isExpandable && (
-          <motion.span
-            animate={{ x: hovered && isEditable ? 2 : 0 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-          >
-            <ChevronRight size={15} className="text-slate-300" />
-          </motion.span>
-        )}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -181,9 +183,13 @@ interface JsonLevelColumnProps {
   activeCollectionName: string | null;
   activeDatabaseName: string | null;
   onPushJsonPath: (path: ActivePath) => void;
-  onPushReference: (oid: string, fieldKey: string) => Promise<void>;
+  onPushReference: (oid: string, fieldKey: string, popIndex?: number) => Promise<void>;
+  onNavigateToReference: (oid: string) => Promise<void>;
   onPopToIndex: (index: number) => void;
   onMutate: (op: MockMutationRequest) => Promise<unknown>;
+  uniqueOids: Set<string>;
+  onRegisterUniqueOid: (oid: string) => void;
+  onUnregisterUniqueOid: (oid: string) => void;
   onSetEditingId: (id: string | null) => void;
 }
 
@@ -192,6 +198,7 @@ interface JsonLevelColumnProps {
 export function JsonLevelColumn({
   path,
   openDocument,
+  slotIndex,
   isLoading,
   changedPaths,
   editingId,
@@ -200,8 +207,12 @@ export function JsonLevelColumn({
   activeDatabaseName,
   onPushJsonPath,
   onPushReference,
+  onNavigateToReference,
   onPopToIndex,
   onMutate,
+  uniqueOids,
+  onRegisterUniqueOid,
+  onUnregisterUniqueOid,
   onSetEditingId,
 }: JsonLevelColumnProps) {
   const refOid     = path.kind === 'reference' ? path.refOid     : null;
@@ -211,12 +222,9 @@ export function JsonLevelColumn({
     ? (path.projectionPath ?? [])
     : path.projectionPath;
 
-  // 현재 컬럼의 activePaths 인덱스 — goSibling 패턴에서 position 판단에 사용
-  const myIndex = useMemo(
-    () => activePaths.findIndex((p) => p.comp.id === path.comp.id),
-    [activePaths, path],
-  );
-  const hasPathsAfter = myIndex >= 0 && myIndex < activePaths.length - 1;
+  // visibleColumns는 activePaths.slice(-3) 왼쪽 정렬 → slotIndex로 실제 index 역산
+  const myIndex = Math.max(0, activePaths.length - 3) + slotIndex;
+  const hasPathsAfter = myIndex < activePaths.length - 1;
 
   const [refFullDoc, setRefFullDoc] = useState<Document | null>(null);
   useEffect(() => {
@@ -225,35 +233,33 @@ export function JsonLevelColumn({
     getFullDocumentById(refOid).then(setRefFullDoc).catch(() => setRefFullDoc(null));
   }, [refOid]);
 
+  // 컬럼 헤더 REF 배지에 '{컬렉션}/{문서}' 표시용
+  const [refInfo, setRefInfo] = useState<ReferenceInfo | null>(null);
+  useEffect(() => {
+    if (!refOid) { setRefInfo(null); return; }
+    setRefInfo(null);
+    getReferenceInfo(refOid).then(setRefInfo).catch(() => setRefInfo(null));
+  }, [refOid]);
+
   const displayDoc = refOid ? refFullDoc : openDocument;
 
   const currentNode: JsonValue = displayDoc ? resolveAtPath(displayDoc, projectionPath) : null;
   const entries = getEntries(currentNode);
 
-  // OID → 실제 참조 여부 비동기 캐시
-  const [refCache, setRefCache] = useState<Map<string, boolean>>(new Map());
-  const oidCacheKey = entries
-    .filter(({ key, value }) => key !== '_id' && isBsonOid(value))
-    .map(({ value }) => (value as { $oid: string }).$oid)
-    .join(',');
-
-  useEffect(() => {
-    if (!oidCacheKey) return;
-    const todo = oidCacheKey.split(',').filter((id) => !refCache.has(id));
-    if (!todo.length) return;
-    void Promise.all(todo.map(async (id) => [id, await checkReference(id)] as [string, boolean]))
-      .then((res) => setRefCache((prev) => {
-        const next = new Map(prev);
-        res.forEach(([id, ok]) => next.set(id, ok));
-        return next;
-      }));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [oidCacheKey]);
-
   // ── 탐색 — goSibling 패턴 ─────────────────────────────────────────────────
 
   const handlePushChild = useCallback((key: string) => {
     const nextProj = [...projectionPath, key];
+    const nextActivePath = activePaths[myIndex + 1];
+    const isSamePath =
+      nextActivePath &&
+      JSON.stringify(nextActivePath.projectionPath) === JSON.stringify(nextProj) &&
+      (refOid ? nextActivePath.kind === 'reference' : nextActivePath.kind === 'normal');
+    if (isSamePath) {
+      if (activePaths.length - myIndex === 3)
+        onPopToIndex(myIndex + 1);
+      return;
+    }
     if (myIndex >= 0) onPopToIndex(myIndex);
 
     if (refOid) {
@@ -265,7 +271,7 @@ export function JsonLevelColumn({
         projectionPath: nextProj,
         chainColor: chainColor ?? '#f59e0b',
         chainIndex,
-        comp: { id: `${refOid}-${nextProj.join('.')}`, direction: 1 },
+        comp: { id: nextPathId(), direction: -1 },
       };
       onPushJsonPath(child);
     } else {
@@ -276,23 +282,35 @@ export function JsonLevelColumn({
         label: key,
         documentOid: docOid,
         projectionPath: nextProj,
-        comp: { id: `${docOid}-${nextProj.join('.')}`, direction: 1 },
+        comp: { id: nextPathId(), direction: -1 },
       };
       onPushJsonPath(child);
     }
-  }, [myIndex, path, refOid, chainColor, chainIndex, projectionPath, onPopToIndex, onPushJsonPath]);
+  }, [activePaths, slotIndex, path, refOid, chainColor, chainIndex, projectionPath, onPopToIndex, onPushJsonPath]);
 
-  const [deleteTarget, setDeleteTarget] = useState<{ fieldKey: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ fieldKey: string; value: JsonValue } | null>(null);
 
   const docOidForMutate = refOid
     ? (displayDoc?._id?.$oid ?? '')
     : (path.kind === 'normal' ? (openDocument?._id?.$oid ?? '') : '');
 
   const isObjectNode = currentNode !== null && typeof currentNode === 'object' &&
-    !Array.isArray(currentNode) && !isBsonOid(currentNode) && !isDBRef(currentNode);
+    !Array.isArray(currentNode) && !isBsonOid(currentNode);
   const isArrayNode = Array.isArray(currentNode);
   const canAddField = !!displayDoc && (isObjectNode || isArrayNode);
   const addFieldEditingId = `field:__new__:${projectionPath.join('.')}`;
+
+  // 현재 편집 중인 필드가 REF oid라면, InlineSegmentEditor에 어떤 문서를 참조 중인지 전달
+  const [editingRefInfo, setEditingRefInfo] = useState<ReferenceInfo | null>(null);
+  useEffect(() => {
+    if (!editingId) { setEditingRefInfo(null); return; }
+    const entry = entries.find(({ key }) => `field:${[...projectionPath, key].join('.')}` === editingId);
+    if (!entry || !isBsonOid(entry.value)) { setEditingRefInfo(null); return; }
+    const oid = entry.value.$oid;
+    let cancelled = false;
+    getReferenceInfo(oid).then((info) => { if (!cancelled) setEditingRefInfo(info); });
+    return () => { cancelled = true; };
+  }, [editingId]);
 
   // ── 필드 렌더러 ────────────────────────────────────────────────────────────
 
@@ -302,9 +320,11 @@ export function JsonLevelColumn({
     const editorId = `field:${[...projectionPath, fieldKey].join('.')}`;
     const isEditing = editingId === editorId;
     const isHighlighted = changedPaths.some((p) => p.includes(fieldKey));
-    const isExpandable = type === 'object' || type === 'array' || type === 'dbref';
-    const isOidRef = type === 'oid' && !isId && refCache.get((value as { $oid: string }).$oid) === true;
-    const isEditable = !isId && !isOidRef;
+    const isExpandable = type === 'object' || type === 'array';
+    // _id가 아닌 단일 {$oid} 필드는, 이 앱이 직접 만든 '고유 oid' 레지스트리에 없으면 DBRef(참조)로 간주
+    const isOidRef = type === 'oid' && !isId && !uniqueOids.has((value as { $oid: string }).$oid);
+    // _id만 수정 불가, REF로 분류된 oid도 키 이름/참조 대상을 수정할 수 있어야 함
+    const isEditable = !isId;
     const isContainer = type === 'object' || type === 'array';
 
     if (isEditing) {
@@ -319,10 +339,13 @@ export function JsonLevelColumn({
             : type === 'object' ? 'Object'
             : type === 'number' ? 'Number'
             : type === 'boolean' ? 'Boolean'
+            : type === 'oid' ? 'ObjectID'
             : 'String'
           }
-          initialValue={!isContainer ? value : undefined}
+          initialValue={value}
           siblingKeys={entries.map((e) => e.key).filter((k) => k !== fieldKey)}
+          activeDatabaseName={activeDatabaseName}
+          currentRefInfo={editingRefInfo}
           onSubmit={async (data) => {
             if (!activeCollectionName || !activeDatabaseName) return;
             await onMutate({
@@ -334,23 +357,29 @@ export function JsonLevelColumn({
                 path: projectionPath,
                 key: fieldKey,
                 action: 'edit',
-                // object/array 유지 또는 타입 변경 시 유효하지 않은 값에 {}·[] 기본값 적용
+                // 명시적으로 제출된 값(raw 붙여넣기 포함) 우선, container는 미입력 시 기존 값 유지
                 value: (() => {
-                  const v = isContainer ? value : data.value;
-                  if (v === null || v === undefined) {
-                    if (data.type === 'Object') return {} as JsonValue;
-                    if (data.type === 'Array') return [] as JsonValue;
-                  }
-                  return v ?? null;
+                  if (data.value !== undefined) return data.value;
+                  if (isContainer) return value;
+                  if (data.type === 'Object') return {} as JsonValue;
+                  if (data.type === 'Array') return [] as JsonValue;
+                  return null;
                 })(),
                 nextKey: data.key !== fieldKey ? data.key : undefined,
                 containerType: 'object',
               },
             });
+            // oid 값 자체가 실제로 바뀐 경우에만 고유 oid 레지스트리 갱신
+            // (키 이름만 바꾸거나 그대로 제출한 경우 REF/owned 분류를 건드리지 않음)
+            const nextValue = data.value;
+            if (isBsonOid(value) && nextValue !== undefined && isBsonOid(nextValue) && value.$oid !== nextValue.$oid) {
+              if (uniqueOids.has(value.$oid)) onUnregisterUniqueOid(value.$oid);
+              if (data.objectIdMode === 'generate') onRegisterUniqueOid(nextValue.$oid);
+            }
             onSetEditingId(null);
           }}
           onCancel={() => onSetEditingId(null)}
-          onDelete={() => setDeleteTarget({ fieldKey })}
+          onDelete={() => setDeleteTarget({ fieldKey, value })}
         />
       );
     }
@@ -389,29 +418,30 @@ export function JsonLevelColumn({
           );
         case 'oid': {
           const oid = (value as { $oid: string }).$oid;
+          if (isOidRef) {
+            return (
+              <>
+                <span className="flex items-center justify-center gap-1 text-[11px] font-mono pl-1.5 pr-2 py-0.5 rounded-lg bg-blue-50 text-blue-600 font-semibold shrink-0">
+                <Link size={11} className="text-blue-400 shrink-0" />
+                  REF
+                </span>
+                <span className="text-[12px] font-mono text-blue-500 truncate" title={oid}>
+                  {oid}
+                </span>
+                <CopyBtn text={oid} />
+              </>
+            );
+          }
           return (
             <>
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded-lg bg-amber-50 text-amber-600 font-semibold shrink-0">
+              <span className="flex items-center justify-center gap-1 text-[11px] font-mono pl-1.5 pr-2 py-0.5 rounded-lg bg-amber-50 text-amber-600 font-semibold shrink-0">
+              <KeyRound size={11} className="text-amber-500 shrink-0" />
                 OID
               </span>
               <span className="text-[12px] font-mono text-amber-700 truncate" title={oid}>
-                …{oid.slice(-8)}
+                {oid}
               </span>
               <CopyBtn text={oid} />
-            </>
-          );
-        }
-        case 'dbref': {
-          const dbref = value as { $ref: string; $id: { $oid: string }; $db: string };
-          return (
-            <>
-              <Link size={12} className="text-blue-400 shrink-0" />
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded-lg bg-blue-50 text-blue-600 font-semibold shrink-0">
-                REF
-              </span>
-              <span className="text-[12px] font-mono text-blue-500 truncate">
-                {dbref.$ref}
-              </span>
             </>
           );
         }
@@ -422,22 +452,20 @@ export function JsonLevelColumn({
     const handleClick: (() => void) | null = (() => {
       if (isExpandable || isOidRef) {
         return () => {
-          if (type === 'dbref') {
-            const dbref = value as { $ref: string; $id: { $oid: string }; $db: string };
-            const oid = dbref.$id.$oid;
-            if (myIndex >= 0) onPopToIndex(myIndex);
-            void onPushReference(oid, fieldKey);
-          } else if (isOidRef) {
-            const oid = (value as { $oid: string }).$oid;
-            if (myIndex >= 0) onPopToIndex(myIndex);
-            void onPushReference(oid, fieldKey);
-          } else {
-            handlePushChild(fieldKey);
+          const refOidToPush = isOidRef ? (value as { $oid: string }).$oid : null;
+
+          if (refOidToPush) {
+            const next = activePaths[myIndex + 1];
+            if (next?.kind === 'reference' && (next as ReferenceActivePath).refOid === refOidToPush) return;
+            // 실제로 참조가 존재함이 확인된 후에만 하위 컬럼을 닫음 (오인된 REF 클릭 시 아무 변화 없도록)
+            void onPushReference(refOidToPush, fieldKey, myIndex >= 0 ? myIndex : undefined);
+            return;
           }
+          handlePushChild(fieldKey);
         };
       }
       // 비확장 필드 클릭 시 하위 컬럼이 열려있으면 닫기
-      if (hasPathsAfter) return () => onPopToIndex(myIndex);
+      if (hasPathsAfter) return () => onPopToIndex(myIndex + 1);
       return null;
     })();
 
@@ -474,12 +502,15 @@ export function JsonLevelColumn({
         <HeaderIcon node={currentNode} />
         <span className="text-sm font-semibold text-slate-700 truncate flex-1">{path.label}</span>
         {chainColor && (
-          <span
-            className="text-[10px] font-bold px-2 py-0.5 rounded-md text-white shrink-0 tracking-wide"
+          <button
+            type="button"
+            className="text-[10px] font-bold px-2 py-0.5 rounded-md text-white shrink-0 tracking-wide truncate max-w-[160px] cursor-pointer hover:opacity-80 transition-opacity"
             style={{ backgroundColor: chainColor }}
+            title={refInfo ? `${refInfo.collectionLabel}/${refInfo.documentTitle} 로 이동` : undefined}
+            onClick={() => refOid && void onNavigateToReference(refOid)}
           >
-            REF
-          </span>
+            {refInfo ? `${refInfo.collectionLabel}/${refInfo.documentTitle}` : 'REF'}
+          </button>
         )}
         <span className="text-xs font-mono text-slate-400 tabular-nums">{entries.length}</span>
       </div>
@@ -491,7 +522,7 @@ export function JsonLevelColumn({
         ) : !displayDoc ? (
           <p className="flex-1 flex items-center justify-center text-sm text-slate-400 py-10">문서를 선택하세요</p>
         ) : (
-          <AnimatePresence initial={false}>
+          <AnimatePresence>
             {entries.map(({ key, value }) => renderField(key, value))}
           </AnimatePresence>
         )}
@@ -504,6 +535,7 @@ export function JsonLevelColumn({
               level="field"
               siblingKeys={entries.map((e) => e.key)}
               initialKey={isArrayNode ? String(entries.length) : undefined}
+              activeDatabaseName={activeDatabaseName}
               onSubmit={async (data) => {
                 if (!activeCollectionName || !activeDatabaseName) return;
                 // array는 key를 현재 length로 고정 (next index)
@@ -521,22 +553,32 @@ export function JsonLevelColumn({
                     containerType: isArrayNode ? 'array' : 'object',
                   },
                 });
+                // 새로 생성된 고유 oid는 레지스트리에 등록 (DBRef로 오인되지 않도록)
+                if (data.objectIdMode === 'generate' && data.value !== undefined && isBsonOid(data.value)) {
+                  onRegisterUniqueOid(data.value.$oid);
+                }
                 onSetEditingId(null);
               }}
               onCancel={() => onSetEditingId(null)}
             />
           ) : (
-            <button
+            <motion.button
               type="button"
-              className="flex items-center gap-2.5 px-4 py-3 rounded-2xl border border-dashed border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/40 transition-colors mt-1 cursor-pointer disabled:opacity-40"
+              layout
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 35 }}
+              className="group flex items-center gap-3 px-4 py-3.5 rounded-2xl cursor-pointer hover:bg-slate-50/80 active:bg-slate-100/50 transition-colors"
               onClick={() => onSetEditingId(addFieldEditingId)}
-              disabled={!!editingId}
             >
-              <Plus size={14} className="text-slate-400" />
-              <span className="text-sm text-slate-400">
+              <span className="shrink-0 w-9 h-9 rounded-xl flex items-center justify-center border border-dashed border-slate-300 text-slate-400 group-hover:border-emerald-300 group-hover:text-emerald-500 transition-colors">
+                <Plus size={16} />
+              </span>
+              <span className="text-sm font-medium text-slate-400 group-hover:text-emerald-600 transition-colors">
                 {isArrayNode ? '항목 추가' : '필드 추가'}
               </span>
-            </button>
+            </motion.button>
           )
         )}
       </div>
@@ -556,6 +598,10 @@ export function JsonLevelColumn({
               documentId: docOidForMutate,
               field: { path: projectionPath, key: deleteTarget.fieldKey, action: 'delete', containerType: 'object' },
             });
+            // 삭제되는 필드가 이 앱이 만든 고유 oid였다면 레지스트리에서 함께 제거
+            if (isBsonOid(deleteTarget.value) && uniqueOids.has(deleteTarget.value.$oid)) {
+              onUnregisterUniqueOid(deleteTarget.value.$oid);
+            }
             setDeleteTarget(null);
           }}
           onCancel={() => setDeleteTarget(null)}

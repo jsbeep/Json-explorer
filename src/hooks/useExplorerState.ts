@@ -5,11 +5,12 @@ import {
   getDocumentById,
   getFullDocumentById,
   getDocuments,
+  getReferenceInfo,
   mutateData,
   checkReference,
   subscribeToChanges,
 } from '../services/mockAPI';
-import { getSnapshot } from '../services/mockStorage';
+import { getSnapshot, getUniqueOids, setUniqueOids as persistUniqueOids } from '../services/mockStorage';
 import type {
   ActivePath,
   CollectionSummary,
@@ -30,7 +31,10 @@ import type {
 const CHAIN_COLORS = ['#f59e0b', '#8b5cf6', '#3b82f6', '#ec4899', '#14b8a6'] as const;
 
 let pathIdCounter = 0;
-const nextId = () => String(++pathIdCounter);
+export const nextPathId = () => ++pathIdCounter;
+
+let toastIdCounter = 0;
+const nextId = () => String(++toastIdCounter);
 
 // ── Toast 타입 ────────────────────────────────────────────────────────────────
 
@@ -56,6 +60,7 @@ export interface UseExplorerStateResult {
   isLoading: boolean;
   changedPaths: string[];
   toast: ToastMessage | null;
+  uniqueOids: Set<string>;
 
   // 파생값
   visibleColumns: (ActivePath | null)[];
@@ -68,8 +73,11 @@ export interface UseExplorerStateResult {
   selectDocument: (oid: string, title: string) => Promise<void>;
   pushJsonPath: (path: ActivePath) => void;
   popToIndex: (index: number) => void;
-  pushReference: (oid: string, fieldKey: string) => Promise<void>;
+  pushReference: (oid: string, fieldKey: string, popIndex?: number) => Promise<void>;
+  navigateToReference: (oid: string) => Promise<void>;
   mutate: (op: MockMutationRequest) => Promise<MockMutationResult>;
+  registerUniqueOid: (oid: string) => void;
+  unregisterUniqueOid: (oid: string) => void;
   setEditingId: (id: string | null) => void;
   clearChangedPaths: () => void;
   dismissToast: () => void;
@@ -92,6 +100,7 @@ export function useExplorerState(): UseExplorerStateResult {
   const [isLoading, setIsLoading] = useState(false);
   const [changedPaths, setChangedPaths] = useState<string[]>([]);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [uniqueOids, setUniqueOids] = useState<Set<string>>(() => new Set(getUniqueOids()));
 
   const undoSnapshotRef = useRef<MockSnapshot | null>(null);
   const activeDatabaseRef = useRef<string | null>(null);
@@ -111,6 +120,28 @@ export function useExplorerState(): UseExplorerStateResult {
   const dismissToast = useCallback(() => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToast(null);
+  }, []);
+
+  // 이 앱이 직접 생성한 '고유 oid' 집합 — 다른 문서를 참조하지 않는 단순 식별자 값.
+  // 여기 없는 단일 {$oid} 필드는 모두 DBRef(참조)로 분류된다.
+  const registerUniqueOid = useCallback((oid: string) => {
+    setUniqueOids((prev) => {
+      if (prev.has(oid)) return prev;
+      const next = new Set(prev);
+      next.add(oid);
+      persistUniqueOids([...next]);
+      return next;
+    });
+  }, []);
+
+  const unregisterUniqueOid = useCallback((oid: string) => {
+    setUniqueOids((prev) => {
+      if (!prev.has(oid)) return prev;
+      const next = new Set(prev);
+      next.delete(oid);
+      persistUniqueOids([...next]);
+      return next;
+    });
   }, []);
 
   // ── 파생값 ──────────────────────────────────────────────────────────────────
@@ -142,7 +173,7 @@ export function useExplorerState(): UseExplorerStateResult {
           });
         } else if (ap.kind === 'normal') {
           const kind = ap.projectionPath && ap.projectionPath.length > 0 ? 'field' : 'document';
-          segs.push({ key: ap.comp.id, label: ap.label, kind });
+          segs.push({ key: String(ap.comp.id), label: ap.label, kind });
         }
       }
     }
@@ -169,9 +200,10 @@ export function useExplorerState(): UseExplorerStateResult {
           columnKind: 'collections',
           label: result.activeDatabase,
           databaseName: result.activeDatabase,
-          comp: { id: nextId(), direction: 1 },
+          comp: { id: nextPathId(), direction: 1 },
         },
       ]);
+      setEditingId(null);
     } catch {
       setConnectionStatus('error');
       showToast('DB 연결에 실패했습니다.', 'error');
@@ -198,9 +230,10 @@ export function useExplorerState(): UseExplorerStateResult {
           columnKind: 'collections',
           label: name,
           databaseName: name,
-          comp: { id: nextId(), direction: -1 },
+          comp: { id: nextPathId(), direction: -1 },
         },
       ]);
+      setEditingId(null);
     } catch {
       showToast('데이터베이스를 불러올 수 없습니다.', 'error');
     } finally {
@@ -209,6 +242,11 @@ export function useExplorerState(): UseExplorerStateResult {
   }, [showToast]);
 
   const selectCollection = useCallback(async (name: string, label: string) => {
+    if (activeCollectionRef.current === name && activePaths.length > 1) {
+      if (activePaths.length === 3)
+        popToIndex(1); // 이미 선택된 컬렉션 클릭 시 문서/필드 경로 팝
+      return;
+    }
     setIsLoading(true);
     try {
       const docs = await getDocuments(name);
@@ -222,25 +260,31 @@ export function useExplorerState(): UseExplorerStateResult {
           columnKind: 'collections',
           label: activeDatabaseRef.current ?? '',
           databaseName: activeDatabaseRef.current ?? undefined,
-          comp: { id: prev[0]?.comp.id ?? nextId(), direction: 1 },
+          comp: { id: prev[0]?.comp.id ?? nextPathId(), direction: 1 },
         };
         const next: NormalActivePath = {
           kind: 'normal',
           columnKind: 'documents',
           label,
           collectionName: name,
-          comp: { id: nextId(), direction: -1 },
+          comp: { id: nextPathId(), direction: -1 },
         };
         return [base, next];
       });
+      setEditingId(null);
     } catch {
       showToast('컬렉션을 불러올 수 없습니다.', 'error');
     } finally {
       setIsLoading(false);
     }
-  }, [showToast]);
+  }, [showToast, activePaths, activeCollectionRef]);
 
   const selectDocument = useCallback(async (oid: string, title: string) => {
+    if (activeDocumentOidRef.current === oid && activePaths.length > 2) {
+      if (activePaths.length === 4)
+        popToIndex(2); // 이미 선택된 컬렉션 클릭 시 문서/필드 경로 팝
+      return;
+    }
     setIsLoading(true);
     try {
       const doc = await getFullDocumentById(oid); // 전체 문서 — 로컬 JSON 탐색용
@@ -253,35 +297,42 @@ export function useExplorerState(): UseExplorerStateResult {
           label: title,
           documentOid: oid,
           projectionPath: [],
-          comp: { id: nextId(), direction: -1 },
+          comp: { id: nextPathId(), direction: -1 },
         };
         return [...prev.slice(0, 2), jsonPath];
       });
+      setEditingId(null);
     } catch {
       showToast('문서를 불러올 수 없습니다.', 'error');
     } finally {
       setIsLoading(false);
     }
-  }, [showToast]);
+  }, [showToast, activePaths]);
 
   const pushJsonPath = useCallback((path: ActivePath) => {
     setActivePaths((prev) => [...prev, path]);
+    // 컬럼이 슬라이딩 윈도우 밖으로 밀려나면서 InlineSegmentEditor가 보이지 않게 되어도
+    // editingId가 남아있으면 다른 컬럼의 추가/수정이 막히므로 탐색 시 항상 정리
+    setEditingId(null);
   }, []);
 
   const popToIndex = useCallback((index: number) => {
     setActivePaths((prev) => prev.slice(0, index + 1));
     // json depth 이하로 pop 시 openDocument 상태 유지 (컬럼이 재사용)
+    setEditingId(null);
   }, []);
 
-  const pushReference = useCallback(async (oid: string, fieldKey: string) => {
+  const pushReference = useCallback(async (oid: string, fieldKey: string, popIndex?: number) => {
     setIsLoading(true);
     try {
       const isRef = await checkReference(oid);
+      // 참조가 실제로 존재하지 않으면 아무 것도 하지 않음 — 열려있던 하위 컬럼도 그대로 유지
       if (!isRef) return;
 
       const doc = await getDocumentById(oid);
       setActivePaths((prev) => {
-        const chainIndex = prev.filter((p) => p.kind === 'reference').length;
+        const base = popIndex !== undefined ? prev.slice(0, popIndex + 1) : prev;
+        const chainIndex = base.filter((p) => p.kind === 'reference').length;
         const chainColor = CHAIN_COLORS[chainIndex % CHAIN_COLORS.length];
         const refPath: ReferenceActivePath = {
           kind: 'reference',
@@ -291,15 +342,72 @@ export function useExplorerState(): UseExplorerStateResult {
           projectionPath: [],
           chainColor,
           chainIndex,
-          comp: { id: nextId(), direction: 1 },
+          comp: { id: nextPathId(), direction: 1 },
         };
         // refDoc는 참조된 문서로 openDocument를 교체하지 않고 별도 처리
         // JsonLevelColumn에서 refOid를 직접 사용해 getDocumentById 호출
         void doc; // 참조 확인용, 실제 렌더는 컬럼에서 처리
-        return [...prev, refPath];
+        return [...base, refPath];
       });
+      setEditingId(null);
     } catch {
       showToast('레퍼런스를 불러올 수 없습니다.', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [showToast]);
+
+  // 참조 배지(REF) 클릭 시 — 체인을 따라가지 않고 Path를 초기화한 후 참조 대상 컬렉션/문서로 바로 이동
+  const navigateToReference = useCallback(async (oid: string) => {
+    setIsLoading(true);
+    try {
+      const info = await getReferenceInfo(oid);
+      if (!info) {
+        showToast('참조된 문서를 찾을 수 없습니다.', 'error');
+        return;
+      }
+      const { databaseName, collectionName, collectionLabel, documentTitle } = info;
+      const [cols, docs, doc] = await Promise.all([
+        getCollections(databaseName),
+        getDocuments(collectionName),
+        getFullDocumentById(oid),
+      ]);
+
+      activeDatabaseRef.current = databaseName;
+      activeCollectionRef.current = collectionName;
+      activeDocumentOidRef.current = oid;
+
+      setActiveDatabase(databaseName);
+      setCollections(cols);
+      setDocuments(docs);
+      setOpenDocument(doc);
+      setActivePaths([
+        {
+          kind: 'normal',
+          columnKind: 'collections',
+          label: databaseName,
+          databaseName,
+          comp: { id: nextPathId(), direction: 1 },
+        },
+        {
+          kind: 'normal',
+          columnKind: 'documents',
+          label: collectionLabel,
+          collectionName,
+          comp: { id: nextPathId(), direction: 1 },
+        },
+        {
+          kind: 'normal',
+          columnKind: 'json',
+          label: documentTitle,
+          documentOid: oid,
+          projectionPath: [],
+          comp: { id: nextPathId(), direction: 1 },
+        },
+      ]);
+      setEditingId(null);
+    } catch {
+      showToast('이동에 실패했습니다.', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -313,7 +421,15 @@ export function useExplorerState(): UseExplorerStateResult {
       setChangedPaths(result.changedPaths);
 
       // 관련 캐시 갱신
-      if ('collection' in op && typeof op.collection === 'string' && activeCollectionRef.current === op.collection) {
+      if (op.type === 'deleteCollection' && activeCollectionRef.current === op.collection) {
+        // 현재 보고 있던 컬렉션 자체가 삭제됨 — 문서/탐색 상태 초기화 (getDocuments 호출 시 실패하므로 분기)
+        activeCollectionRef.current = null;
+        activeDocumentOidRef.current = null;
+        setDocuments([]);
+        setOpenDocument(null);
+        setActivePaths((prev) => prev.slice(0, 1));
+        setEditingId(null);
+      } else if ('collection' in op && typeof op.collection === 'string' && activeCollectionRef.current === op.collection) {
         const docs = await getDocuments(op.collection);
         setDocuments(docs);
         // 열린 문서 갱신
@@ -322,7 +438,11 @@ export function useExplorerState(): UseExplorerStateResult {
           setOpenDocument(doc);
         }
       }
-      if (op.type === 'createCollection' && op.database === activeDatabaseRef.current) {
+      // 컬렉션 메타데이터(이름/타이틀 키 등) 변경 시 collections 캐시도 갱신
+      if (
+        (op.type === 'createCollection' || op.type === 'renameCollection' || op.type === 'setCollectionTitleKey' || op.type === 'deleteCollection') &&
+        op.database === activeDatabaseRef.current
+      ) {
         const cols = await getCollections(op.database);
         setCollections(cols);
       }
@@ -401,6 +521,7 @@ export function useExplorerState(): UseExplorerStateResult {
     isLoading,
     changedPaths,
     toast,
+    uniqueOids,
     visibleColumns,
     breadcrumbs,
     initialize,
@@ -410,7 +531,10 @@ export function useExplorerState(): UseExplorerStateResult {
     pushJsonPath,
     popToIndex,
     pushReference,
+    navigateToReference,
     mutate,
+    registerUniqueOid,
+    unregisterUniqueOid,
     setEditingId,
     clearChangedPaths,
     dismissToast,
