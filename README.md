@@ -1,6 +1,6 @@
 <!-- Project README: Json_explorer -->
 ### -> https://jsb0315.github.io/Json_explorer/
-![alt text](image.png)
+![alt text](image-3.png)
 
 # JSON Explorer & Editor
 ## Miller Column interface · Inline editing · Reference-aware navigation
@@ -8,11 +8,6 @@
 <aside>
 💡
 
-**MongoDB Live Dashboard**
-![1년전 프로토타입](image-1.png)
-1년전 프로토타입
-![FireStore 패널 뷰](image-2.png)
-FireStore 패널 뷰
 
 하고싶은거:
 https://github.com/jsb0315/Mongolive_legacy 리뉴얼
@@ -36,3 +31,19 @@ UI/UX 및 상태 관리를 선제적으로 유닛 테스트
     - **TypeScript**
     - **TailwindCSS, Lucide-react**
 </aside>
+
+<br>
+<br>
+<br><br>
+
+**MongoDB Live Dashboard**
+![1년전 프로토타입](image-1.png)
+1년전 프로토타입
+![FireStore 패널 뷰](image-2.png)
+FireStore 패널 뷰
+
+<br>
+<br>
+
+프로토타입 2
+![alt text](image.png)
