@@ -358,6 +358,7 @@ export function InlineSegmentEditor({
             )}
             placeholder={level === 'collection' ? '컬렉션 이름 (영문)' : level === 'document' ? '문서 이름' : '키 이름'}
             value={keyValue}
+            disabled={mode === 'add' && keyValue.trim() !== '' && !Number.isNaN(Number(keyValue))}
             onChange={(e) => setKeyValue(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') void handleSubmit(); if (e.key === 'Escape') onCancel(); }}
             onDragOver={isSimpleLevel && mode === 'add' ? (e) => { e.preventDefault(); setIsDragOver(true); } : undefined}

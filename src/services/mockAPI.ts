@@ -254,15 +254,16 @@ export const mutateData = async (op: MockMutationRequest): Promise<MockMutationR
       const existingIndex = collection.documents.findIndex((candidate) => getDocumentOid(candidate) === documentOid);
       const oldDocument = existingIndex >= 0 ? cloneDocument(collection.documents[existingIndex]) : undefined;
 
-      let changedPath: string;
+      // changedPaths/패치 이벤트의 경로는 배열 index가 아니라 문서 oid로 식별한다 —
+      // index는 같은 컬렉션 안에서도 추가/삭제로 흔들리는데, 이 경로는 UI에서
+      // "정확히 이 문서가 바뀌었는지"를 비교하는 키로 쓰인다(예: 하이라이트).
+      const changedPath = `documents.${documentOid}`;
       let changeEvent: FriendlyPatchEvent;
       if (existingIndex >= 0) {
         collection.documents[existingIndex] = clonedDocument;
-        changedPath = `documents.${existingIndex}`;
         changeEvent = toChangeEvent(changedPath, 'updated', oldDocument, clonedDocument);
       } else {
         collection.documents.push(clonedDocument);
-        changedPath = `documents.${collection.documents.length - 1}`;
         changeEvent = toChangeEvent(changedPath, 'added', undefined, clonedDocument);
       }
 
@@ -307,14 +308,14 @@ export const mutateData = async (op: MockMutationRequest): Promise<MockMutationR
         type: 'patch',
         database: op.database,
         collection: op.collection,
-        patch: [toChangeEvent(`documents.${index}`, 'removed', removedDocument, undefined)],
+        patch: [toChangeEvent(`documents.${op.documentId}`, 'removed', removedDocument, undefined)],
         tracePath: [op.database, op.collection, op.documentId],
       });
 
       return {
         status: 'ok',
         snapshot: getSnapshot(),
-        changedPaths: [`databases.${op.database}.collections.${op.collection}.documents.${index}`],
+        changedPaths: [`databases.${op.database}.collections.${op.collection}.documents.${op.documentId}`],
         tracePath: [op.database, op.collection, op.documentId],
         collectionKey: collectionKey(op.database, op.collection),
       };
@@ -351,7 +352,7 @@ export const mutateData = async (op: MockMutationRequest): Promise<MockMutationR
       return {
         status: 'ok',
         snapshot: getSnapshot(),
-        changedPaths: mutation.changedPaths.map((path) => `databases.${op.database}.collections.${op.collection}.documents.${documentIndex}.${path}`),
+        changedPaths: mutation.changedPaths.map((path) => `databases.${op.database}.collections.${op.collection}.documents.${op.documentId}.${path}`),
         tracePath: [op.database, op.collection, op.documentId, ...op.field.path, op.field.key],
         collectionKey: collectionKey(op.database, op.collection),
       };

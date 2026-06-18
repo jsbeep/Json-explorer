@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { Plus } from 'lucide-react';
 import { SPRING_SNAPPY } from '../../../utils/motionPresets';
 
@@ -20,7 +20,7 @@ export function AddItemButton({
   textClassName,
 }: AddItemButtonProps) {
   return (
-    <motion.button
+    <m.button
       type="button"
       layout
       initial={{ opacity: 0 }}
@@ -34,6 +34,6 @@ export function AddItemButton({
         <Plus size={16} />
       </span>
       <span className={textClassName}>{label}</span>
-    </motion.button>
+    </m.button>
   );
 }

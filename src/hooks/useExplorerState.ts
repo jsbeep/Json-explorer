@@ -99,6 +99,7 @@ export function useExplorerState(): UseExplorerStateResult {
   const activeDatabaseRef = useRef<string | null>(null);
   const activeCollectionRef = useRef<string | null>(null);
   const activeDocumentOidRef = useRef<string | null>(null);
+  const changedPathsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 위험 영역(의도적으로 더 쪼개지 않음): 아래의 activePaths state + 3개의 ref
   // (activeDatabaseRef/activeCollectionRef/activeDocumentOidRef)는 탐색 액션
@@ -131,7 +132,10 @@ export function useExplorerState(): UseExplorerStateResult {
       } else if (ap.columnKind === 'json') {
         if (ap.kind === 'reference') {
           segs.push({
-            key: `ref-${ap.refOid}`,
+            // refOid만으로 key를 만들면 같은 문서를 참조하는 두 경로가 동시에
+            // activePaths에 있을 때(순환 참조 등) key가 충돌한다 — comp.id는
+            // push마다 고유하므로 이를 사용한다.
+            key: `ref-${ap.comp.id}`,
             label: ap.label,
             kind: 'document',
             chainColor: ap.chainColor,
@@ -384,6 +388,10 @@ export function useExplorerState(): UseExplorerStateResult {
     try {
       const result = await mutateData(op);
       setChangedPaths(result.changedPaths);
+      // 하이라이트를 2초 후 자동으로 해제 — 그 전에 다른 mutate가 일어나면
+      // 타이머를 새로 잡아 다시 2초간 보여준다.
+      if (changedPathsTimerRef.current) clearTimeout(changedPathsTimerRef.current);
+      changedPathsTimerRef.current = setTimeout(() => setChangedPaths([]), 2000);
 
       // 관련 캐시 갱신
       if (op.type === 'deleteCollection' && activeCollectionRef.current === op.collection) {
@@ -434,7 +442,10 @@ export function useExplorerState(): UseExplorerStateResult {
     }
   }, [showToast]);
 
-  const clearChangedPaths = useCallback(() => setChangedPaths([]), []);
+  const clearChangedPaths = useCallback(() => {
+    if (changedPathsTimerRef.current) clearTimeout(changedPathsTimerRef.current);
+    setChangedPaths([]);
+  }, []);
 
   const undo = useCallback(async () => {
     const snapshot = undoSnapshotRef.current;

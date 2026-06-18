@@ -138,7 +138,9 @@ export function DocumentsColumn({
         ) : (
           documents.map((doc) => {
             const isEditing = editingId === `document:${doc.id}`;
-            const isHighlighted = isPathChanged(changedPaths, doc.id);
+            const isHighlighted = activeDatabaseName && activeCollectionName
+              ? isPathChanged(changedPaths, `databases.${activeDatabaseName}.collections.${activeCollectionName}.documents.${doc.id}`)
+              : false;
 
             if (isEditing) {
               return (

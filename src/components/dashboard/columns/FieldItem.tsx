@@ -1,6 +1,6 @@
 // path: src/components/dashboard/columns/FieldItem.tsx
 import type { ReactNode } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { ChevronRight, Pencil } from 'lucide-react';
 import { cn } from '../../../utils/cn';
 import { SPRING_SNAPPY, SPRING_HOVER } from '../../../utils/motionPresets';
@@ -24,7 +24,7 @@ export function FieldItem({
   const { hovered, hoverHandlers } = useHover();
 
   return (
-    <motion.div
+    <m.div
       layout
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -51,18 +51,18 @@ export function FieldItem({
 
       <div className="flex items-center shrink-0">
         {isExpandable && (
-          <motion.span
+          <m.span
             animate={{ x: hovered && isEditable ? 2 : 0 }}
             transition={SPRING_HOVER}
             className="mr-1"
           >
             <ChevronRight size={15} className="text-slate-300" />
-          </motion.span>
+          </m.span>
         )}
         {isEditable && (
           <AnimatePresence>
             {hovered && (
-              <motion.div
+              <m.div
                 className="flex items-center overflow-hidden"
                 initial={{ width: 0, opacity: 0 }}
                 animate={{ width: 'auto', opacity: 1 }}
@@ -77,11 +77,11 @@ export function FieldItem({
                 >
                   <Pencil size={16} />
                 </button>
-              </motion.div>
+              </m.div>
             )}
           </AnimatePresence>
         )}
       </div>
-    </motion.div>
+    </m.div>
   );
 }

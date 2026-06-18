@@ -93,6 +93,15 @@ export function JsonLevelColumn({
     getFullDocumentById(refOid).then(setRefFullDoc).catch(() => setRefFullDoc(null));
   }, [refOid]);
 
+  // REF 컬럼은 refFullDoc을 refOid가 바뀔 때만 다시 가져온다. 그런데 REF
+  // 컬럼 자체에서 필드를 수정해도 refOid는 그대로이므로 위 effect가 다시
+  // 실행되지 않아 화면이 갱신되지 않는다 — mutate가 성공한 직후 이 컬럼이
+  // 직접 refFullDoc을 다시 가져와서 즉시 반영한다.
+  const refreshRefDocument = useCallback(() => {
+    if (!refOid) return;
+    getFullDocumentById(refOid).then(setRefFullDoc).catch(() => setRefFullDoc(null));
+  }, [refOid]);
+
   // 컬럼 헤더 REF 배지에 '{컬렉션}/{문서}' 표시용
   const [refInfo, setRefInfo] = useState<ReferenceInfo | null>(null);
   useEffect(() => {
@@ -158,17 +167,30 @@ export function JsonLevelColumn({
     ? (displayDoc?._id?.$oid ?? '')
     : (path.kind === 'normal' ? (openDocument?._id?.$oid ?? '') : '');
 
+  // REF 컬럼(refOid가 있는 경우)은 "현재 선택된 컬렉션/DB"가 아니라 참조 대상
+  // 문서가 실제로 속한 컬렉션/DB로 mutate해야 한다. activeDatabaseName/
+  // activeCollectionName 그대로 쓰면 참조 대상이 다른 컬렉션(혹은 다른 DB)에
+  // 있을 때 거기서 docOidForMutate를 찾지 못해 "Document not found"가 뜬다.
+  // refInfo는 getReferenceInfo(refOid)로 이미 가져온 참조 대상의 실제 위치.
+  const mutateDatabaseName = refOid ? (refInfo?.databaseName ?? null) : activeDatabaseName;
+  const mutateCollectionName = refOid ? (refInfo?.collectionName ?? null) : activeCollectionName;
+
   const isObjectNode = currentNode !== null && typeof currentNode === 'object' &&
     !Array.isArray(currentNode) && !isBsonOid(currentNode);
   const isArrayNode = Array.isArray(currentNode);
   const canAddField = !!displayDoc && (isObjectNode || isArrayNode);
-  const addFieldEditingId = `field:__new__:${projectionPath.join('.')}`;
+  // path.comp.id를 포함해야 한다 — 그렇지 않으면 동일한 projectionPath를 가진
+  // 다른 컬럼(예: 부모 문서와 그 안의 REF 문서가 둘 다 루트에서 "필드 추가"를
+  // 누를 때)이 editingId 문자열이 우연히 같아져서 두 컬럼의 InlineSegmentEditor가
+  // 동시에 열린다. editingId는 전역(useExplorerState)에서 하나만 관리되므로
+  // 컬럼별로 구분 가능한 값이어야 한다.
+  const addFieldEditingId = `field:${path.comp.id}:__new__:${projectionPath.join('.')}`;
 
   // 현재 편집 중인 필드가 REF oid라면, InlineSegmentEditor에 어떤 문서를 참조 중인지 전달
   const [editingRefInfo, setEditingRefInfo] = useState<ReferenceInfo | null>(null);
   useEffect(() => {
     if (!editingId) { setEditingRefInfo(null); return; }
-    const entry = entries.find(({ key }) => `field:${[...projectionPath, key].join('.')}` === editingId);
+    const entry = entries.find(({ key }) => `field:${path.comp.id}:${[...projectionPath, key].join('.')}` === editingId);
     if (!entry || !isBsonOid(entry.value)) { setEditingRefInfo(null); return; }
     const oid = entry.value.$oid;
     let cancelled = false;
@@ -189,9 +211,15 @@ export function JsonLevelColumn({
   const renderField = (fieldKey: string, value: JsonValue) => {
     const type = getFieldType(value);
     const isId = fieldKey === '_id';
-    const editorId = `field:${[...projectionPath, fieldKey].join('.')}`;
+    const editorId = `field:${path.comp.id}:${[...projectionPath, fieldKey].join('.')}`;
     const isEditing = editingId === editorId;
-    const isHighlighted = isPathChanged(changedPaths, fieldKey);
+    // 이 필드가 실제로 속한 DB/컬렉션/문서까지 포함한 전체 경로로 정확히 비교한다 —
+    // fieldKey만으로 비교하면 다른 문서/컬렉션의 동명 필드(예: 모든 문서의 "name")가
+    // 전부 하이라이트되는 버그가 생긴다.
+    const fullFieldPath = mutateDatabaseName && mutateCollectionName && docOidForMutate
+      ? `databases.${mutateDatabaseName}.collections.${mutateCollectionName}.documents.${docOidForMutate}.${[...projectionPath, fieldKey].join('.')}`
+      : null;
+    const isHighlighted = fullFieldPath ? isPathChanged(changedPaths, fullFieldPath) : false;
     const isExpandable = type === 'object' || type === 'array';
     // _id가 아닌 단일 {$oid} 필드는, 이 앱이 직접 만든 '고유 oid' 레지스트리에 없으면 DBRef(참조)로 간주
     const isOidRef = type === 'oid' && !isId && !uniqueOids.has((value as { $oid: string }).$oid);
@@ -216,14 +244,14 @@ export function JsonLevelColumn({
           }
           initialValue={value}
           siblingKeys={entries.map((e) => e.key).filter((k) => k !== fieldKey)}
-          activeDatabaseName={activeDatabaseName}
+          activeDatabaseName={mutateDatabaseName}
           currentRefInfo={editingRefInfo}
           onSubmit={async (data) => {
-            if (!activeCollectionName || !activeDatabaseName) return;
+            if (!mutateCollectionName || !mutateDatabaseName) return;
             await onMutate({
               type: 'mutateField',
-              database: activeDatabaseName,
-              collection: activeCollectionName,
+              database: mutateDatabaseName,
+              collection: mutateCollectionName,
               documentId: docOidForMutate,
               field: {
                 path: projectionPath,
@@ -238,7 +266,10 @@ export function JsonLevelColumn({
                   return null;
                 })(),
                 nextKey: data.key !== fieldKey ? data.key : undefined,
-                containerType: 'object',
+                // 부모 컨테이너가 array면 'array'를 보내야 한다 — 항상 'object'로
+                // 보내면 array 항목을 수정할 때 mockMutate가 "Invalid mutate
+                // path"를 던진다(add 액션은 이미 isArrayNode로 분기하고 있었음).
+                containerType: isArrayNode ? 'array' : 'object',
               },
             });
             // oid 값 자체가 실제로 바뀐 경우에만 고유 oid 레지스트리 갱신
@@ -248,6 +279,7 @@ export function JsonLevelColumn({
               if (uniqueOids.has(value.$oid)) onUnregisterUniqueOid(value.$oid);
               if (data.objectIdMode === 'generate') onRegisterUniqueOid(nextValue.$oid);
             }
+            refreshRefDocument();
             onSetEditingId(null);
           }}
           onCancel={() => onSetEditingId(null)}
@@ -407,15 +439,15 @@ export function JsonLevelColumn({
               level="field"
               siblingKeys={entries.map((e) => e.key)}
               initialKey={isArrayNode ? String(entries.length) : undefined}
-              activeDatabaseName={activeDatabaseName}
+              activeDatabaseName={mutateDatabaseName}
               onSubmit={async (data) => {
-                if (!activeCollectionName || !activeDatabaseName) return;
+                if (!mutateCollectionName || !mutateDatabaseName) return;
                 // array는 key를 현재 length로 고정 (next index)
                 const addKey = isArrayNode ? String(entries.length) : data.key;
                 await onMutate({
                   type: 'mutateField',
-                  database: activeDatabaseName,
-                  collection: activeCollectionName,
+                  database: mutateDatabaseName,
+                  collection: mutateCollectionName,
                   documentId: docOidForMutate,
                   field: {
                     path: projectionPath,
@@ -429,6 +461,7 @@ export function JsonLevelColumn({
                 if (data.objectIdMode === 'generate' && data.value !== undefined && isBsonOid(data.value)) {
                   onRegisterUniqueOid(data.value.$oid);
                 }
+                refreshRefDocument();
                 onSetEditingId(null);
               }}
               onCancel={() => onSetEditingId(null)}
@@ -452,18 +485,19 @@ export function JsonLevelColumn({
           targetType="field"
           targetLabel={deleteTarget.fieldKey}
           onConfirm={async () => {
-            if (!activeCollectionName || !activeDatabaseName) return;
+            if (!mutateCollectionName || !mutateDatabaseName) return;
             await onMutate({
               type: 'mutateField',
-              database: activeDatabaseName,
-              collection: activeCollectionName,
+              database: mutateDatabaseName,
+              collection: mutateCollectionName,
               documentId: docOidForMutate,
-              field: { path: projectionPath, key: deleteTarget.fieldKey, action: 'delete', containerType: 'object' },
+              field: { path: projectionPath, key: deleteTarget.fieldKey, action: 'delete', containerType: isArrayNode ? 'array' : 'object' },
             });
             // 삭제되는 필드가 이 앱이 만든 고유 oid였다면 레지스트리에서 함께 제거
             if (isBsonOid(deleteTarget.value) && uniqueOids.has(deleteTarget.value.$oid)) {
               onUnregisterUniqueOid(deleteTarget.value.$oid);
             }
+            refreshRefDocument();
             setDeleteTarget(null);
           }}
           onCancel={() => setDeleteTarget(null)}

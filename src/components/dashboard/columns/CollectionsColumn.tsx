@@ -75,7 +75,7 @@ export function CollectionsColumn({
         ) : (
           collections.map((col) => {
             const isEditing = editingId === `collection:${col.name}`;
-            const isHighlighted = isPathChanged(changedPaths, col.name);
+            const isHighlighted = isPathChanged(changedPaths, `databases.${databaseName}.collections.${col.name}`);
 
             if (isEditing) {
               return (

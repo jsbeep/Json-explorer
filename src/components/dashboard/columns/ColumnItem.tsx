@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { m, AnimatePresence } from 'framer-motion';
 import { Pencil, ChevronRight } from 'lucide-react';
 import { cn } from '../../../utils/cn';
 import { SPRING_HOVER } from '../../../utils/motionPresets';
@@ -51,7 +51,7 @@ export function ColumnItem({
   }
 
   return (
-    <motion.div
+    <m.div
       ref={ref}
       layout
       className={cn(
@@ -68,7 +68,7 @@ export function ColumnItem({
       {/* 선택 인디케이터 — 왼쪽 작은 도트 (border-l 대신) */}
       <AnimatePresence>
         {isActive && (
-          <motion.span
+          <m.span
             className="absolute left-1.5 -translate-y-1/2 w-1 h-8 rounded-full bg-emerald-500"
             initial={{ scaleY: 0, opacity: 0 }}
             animate={{ scaleY: 1, opacity: 1 }}
@@ -117,7 +117,7 @@ export function ColumnItem({
           {hasActions && (
             <AnimatePresence>
               {hovered && (
-                <motion.div
+                <m.div
                   className="flex items-center gap-1 overflow-hidden"
                   initial={{ width: 0, opacity: 0 }}
                   animate={{ width: 'auto', opacity: 1 }}
@@ -134,13 +134,13 @@ export function ColumnItem({
                       <Pencil size={16} />
                     </button>
                   )}
-                </motion.div>
+                </m.div>
               )}
             </AnimatePresence>
           )}
         </div>
       </div>
-    </motion.div>
+    </m.div>
   );
 }
 

@@ -1,6 +1,6 @@
 // path: src/components/dashboard/columns/CopyBtn.tsx
 import { useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { Check, Copy } from 'lucide-react';
 import { copyToClipboard } from '../../../utils/clipboard';
 
@@ -20,12 +20,12 @@ export function CopyBtn({ text }: { text: string }) {
     >
       <AnimatePresence mode="wait" initial={false}>
         {copied
-          ? <motion.span key="c" initial={{ scale: 0.5 }} animate={{ scale: 1 }} exit={{ scale: 0.5 }} className="block">
+          ? <m.span key="c" initial={{ scale: 0.5 }} animate={{ scale: 1 }} exit={{ scale: 0.5 }} className="block">
               <Check size={16} className="text-emerald-500" />
-            </motion.span>
-          : <motion.span key="d" initial={{ scale: 0.5 }} animate={{ scale: 1 }} exit={{ scale: 0.5 }} className="block">
+            </m.span>
+          : <m.span key="d" initial={{ scale: 0.5 }} animate={{ scale: 1 }} exit={{ scale: 0.5 }} className="block">
               <Copy size={16} />
-            </motion.span>
+            </m.span>
         }
       </AnimatePresence>
     </button>
