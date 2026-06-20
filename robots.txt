@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://jsb0315.github.io/Json_explorer/sitemap.xml
