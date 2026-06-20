@@ -42,8 +42,15 @@ export const getDatabaseSummary = (databaseName: string, database: MockDatabaseR
   };
 };
 
-export const estimateCollectionSizeMb = (documents: Document[]): number =>
-  Number(Math.max(0.01, JSON.stringify(documents).length / 15_000).toFixed(2));
+export const estimateCollectionSizeMb = (
+  documents: Document[],
+): number =>
+  Number(
+    Math.max(
+      0.01,
+      new Blob([JSON.stringify(documents)]).size / 1_000_000,
+    ).toFixed(2),
+  );
 
 const summarizePreviewValue = (value: JsonValue): string => {
   if (value === null) {

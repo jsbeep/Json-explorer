@@ -14,14 +14,14 @@ import { DeleteConfirmModal } from '../common/DeleteConfirmModal';
 const styles = {
   wrap: 'relative min-w-[240px] max-w-[320px]',
   trigger:
-    'w-full rounded-[14px] border border-slate-200 bg-white px-4 py-2 shadow-[0_10px_30px_rgba(15,23,42,0.04)] flex items-center justify-between gap-3 text-left',
+    'w-full rounded-[14px] border border-slate-200 bg-white px-4 py-2 shadow-soft flex items-center justify-between gap-3 text-left',
   triggerMeta: 'flex min-w-0',
   triggerLabel: 'text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400',
   triggerValue: 'min-w-0 truncate text-sm font-semibold text-slate-700',
   triggerArrow: 'shrink-0 text-slate-500 transition-transform',
   overlay: 'fixed inset-0 z-[101]',
   panel:
-    'fixed z-[101] max-h-[360px] overflow-y-auto rounded-2xl bg-white shadow-[0_24px_60px_rgba(15,23,42,0.16)] ring-1 ring-slate-100 p-1.5 flex flex-col gap-0.5',
+    'fixed z-[101] max-h-[360px] overflow-y-auto rounded-2xl bg-white shadow-elevated ring-1 ring-slate-100 p-1.5 flex flex-col gap-0.5',
   row: 'relative flex items-center gap-2.5 px-3 py-2.5 rounded-xl cursor-pointer select-none transition-colors',
   rowActive: 'bg-emerald-50/80',
   rowInactive: 'hover:bg-slate-50',

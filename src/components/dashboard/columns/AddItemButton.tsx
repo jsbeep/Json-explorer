@@ -10,6 +10,7 @@ interface AddItemButtonProps {
   buttonClassName: string;
   iconClassName: string;
   textClassName: string;
+  reduceMotion?: boolean;
 }
 
 export function AddItemButton({
@@ -18,15 +19,16 @@ export function AddItemButton({
   buttonClassName,
   iconClassName,
   textClassName,
+  reduceMotion = false,
 }: AddItemButtonProps) {
   return (
     <m.button
       type="button"
-      layout
+      layout={!reduceMotion}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={SPRING_SNAPPY}
+      transition={reduceMotion ? undefined : SPRING_SNAPPY}
       className={buttonClassName}
       onClick={onClick}
     >

@@ -16,7 +16,7 @@ const TARGET_MESSAGES: Record<string, string> = {
 const styles = {
   backdrop: 'fixed inset-0 flex items-center justify-center p-4 inherit',
   overlay: 'absolute inset-0 bg-slate-900/40 backdrop-blur-sm',
-  card: 'relative z-[10] w-full max-w-sm bg-white rounded-2xl shadow-[0_24px_60px_rgba(15,23,42,0.16)] p-6 flex flex-col gap-5',
+  card: 'relative z-[10] w-full max-w-sm bg-white rounded-2xl shadow-elevated p-6 flex flex-col gap-5',
   iconWrap: 'w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center',
   title: 'text-base font-semibold text-slate-900',
   targetName: 'font-mono text-sm bg-slate-100 rounded-lg px-2 py-1 text-slate-700 mt-1 block truncate',

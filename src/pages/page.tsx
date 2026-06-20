@@ -3,6 +3,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Database } from 'lucide-react';
 import { useExplorerState } from '../hooks/useExplorerState';
 import { Header } from '../components/layout/Header';
+import { LandingIntro } from '../components/layout/LandingIntro';
+import { Footer } from '../components/layout/Footer';
 import { Breadcrumbs } from '../components/dashboard/Breadcrumbs';
 import { MillerColumns } from '../components/dashboard/MillerColumns';
 import { SPRING_SOFT } from '../utils/motionPresets';
@@ -10,10 +12,10 @@ import { SPRING_SOFT } from '../utils/motionPresets';
 // ── 스타일 ────────────────────────────────────────────────────────────────────
 
 const styles = {
-  root: 'h-screen w-screen overflow-hidden flex flex-col gap-2 p-4 bg-slate-100',
-  fab: 'fixed bottom-5 left-5 z-[101] w-11 h-11 rounded-full bg-[#22c55e] text-white shadow-[0_4px_16px_rgba(34,197,94,0.4)] flex items-center justify-center hover:bg-emerald-600 transition-colors',
+  root: 'w-full bg-grid-fade',
+  screen: 'h-screen w-full overflow-hidden flex flex-col gap-2 p-4',
   toastPositioner: 'fixed bottom-20 left-1/2 z-[101] -translate-x-1/2 flex items-center gap-3',
-  toast: 'flex items-center gap-3 px-4 py-2.5 rounded-2xl text-sm font-medium shadow-lg backdrop-blur',
+  toast: 'flex items-center gap-3 px-4 py-2.5 rounded-2xl text-sm font-medium shadow-elevated backdrop-blur',
   toastSuccess: 'bg-white border border-slate-200 text-slate-800',
   toastError: 'bg-red-500 text-white',
   undoBtn: 'text-emerald-600 font-semibold underline underline-offset-2 hover:text-emerald-700 ml-1',
@@ -63,48 +65,56 @@ export default function ExplorerPage() {
 
   return (
     <div className={styles.root}>
-      {/* 헤더 */}
-      <Header
-        activeDatabase={activeDatabase}
-        connectionStatus={connectionStatus}
-        databases={databases}
-        selectDatabase={selectDatabase}
-        mutate={mutate}
-        onRefresh={() => void refresh()}
-      />
-
-
-      {/* Miller Columns */}
-      <div className="flex-1 min-h-0 flex flex-col h-full w-full overflow-hidden rounded-2xl bg-white">
-        {/* 브레드크럼 */}
-        <Breadcrumbs
-          breadcrumbs={breadcrumbs}
-          onNavigate={(index) => popToIndex(index)}
-        />
-        <MillerColumns
-          visibleColumns={visibleColumns}
-          collections={collections}
-          documents={documents}
-          openDocument={openDocument}
-          isLoading={isLoading}
-          changedPaths={changedPaths}
-          editingId={editingId}
-          activePaths={activePaths}
-          selectCollection={selectCollection}
-          selectDocument={selectDocument}
-          pushJsonPath={pushJsonPath}
-          pushReference={pushReference}
-          navigateToReference={navigateToReference}
-          popToIndex={popToIndex}
+      <div className={styles.screen}>
+        {/* 헤더 */}
+        <Header
+          activeDatabase={activeDatabase}
+          connectionStatus={connectionStatus}
+          databases={databases}
+          selectDatabase={selectDatabase}
           mutate={mutate}
-          uniqueOids={uniqueOids}
-          registerUniqueOid={registerUniqueOid}
-          unregisterUniqueOid={unregisterUniqueOid}
-          setEditingId={setEditingId}
-          clearChangedPaths={clearChangedPaths}
+          onRefresh={() => void refresh()}
         />
+
+        {/* Miller Columns */}
+        <div className="flex-1 min-h-0 flex flex-col h-full w-full overflow-hidden rounded-2xl bg-white/80 border border-slate-200/60 shadow-panel">
+          {/* 브레드크럼 */}
+          <Breadcrumbs
+            breadcrumbs={breadcrumbs}
+            onNavigate={(index) => popToIndex(index)}
+          />
+          <MillerColumns
+            visibleColumns={visibleColumns}
+            collections={collections}
+            documents={documents}
+            openDocument={openDocument}
+            isLoading={isLoading}
+            changedPaths={changedPaths}
+            editingId={editingId}
+            activePaths={activePaths}
+            selectCollection={selectCollection}
+            selectDocument={selectDocument}
+            pushJsonPath={pushJsonPath}
+            pushReference={pushReference}
+            navigateToReference={navigateToReference}
+            popToIndex={popToIndex}
+            mutate={mutate}
+            uniqueOids={uniqueOids}
+            registerUniqueOid={registerUniqueOid}
+            unregisterUniqueOid={unregisterUniqueOid}
+            setEditingId={setEditingId}
+            clearChangedPaths={clearChangedPaths}
+          />
+        </div>
       </div>
 
+      {/* 스크롤 시 노출되는 소개 섹션 */}
+      <div className="flex flex-col h-screen w-full">
+        <LandingIntro />
+        <Footer />
+      </div>
+
+      {/* 토스트 알림 */}
       <div className={styles.toastPositioner} aria-live="assertive">
         <AnimatePresence>
           {toast && (

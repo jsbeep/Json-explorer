@@ -19,8 +19,13 @@ import { AddItemButton } from './AddItemButton';
 import { CopyBtn } from './CopyBtn';
 import { FieldItem } from './FieldItem';
 import { HeaderIcon } from './HeaderIcon';
+import { DropOverlay } from './DropOverlay';
 import { getFieldType, resolveAtPath, getEntries } from '../../../utils/jsonTree';
 import { isPathChanged } from '../../../utils/changedPaths';
+import { useFileDrop } from '../../../hooks/useFileDrop';
+
+// 필드/배열 요소가 이 개수를 넘으면 한 번에 다 그리지 않고 일부만 렌더링한다
+const ENTRY_RENDER_CAP = 100;
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -43,6 +48,7 @@ interface JsonLevelColumnProps {
   onRegisterUniqueOid: (oid: string) => void;
   onUnregisterUniqueOid: (oid: string) => void;
   onSetEditingId: (id: string | null) => void;
+  reduceMotion?: boolean;
 }
 
 // ── 컴포넌트 ──────────────────────────────────────────────────────────────────
@@ -66,6 +72,7 @@ export function JsonLevelColumn({
   onRegisterUniqueOid,
   onUnregisterUniqueOid,
   onSetEditingId,
+  reduceMotion,
 }: JsonLevelColumnProps) {
   // 위험 영역(의도적으로 더 쪼개지 않음): 아래부터 renderField까지는 refOid/myIndex
   // 파생값, 두 개의 참조-문서 fetch effect, handlePushChild, deleteTarget/
@@ -114,6 +121,13 @@ export function JsonLevelColumn({
 
   const currentNode: JsonValue = displayDoc ? resolveAtPath(displayDoc, projectionPath) : null;
   const entries = getEntries(currentNode);
+
+  // 노드를 옮길 때마다 "더 보기" 상태 초기화
+  const [showAllEntries, setShowAllEntries] = useState(false);
+  useEffect(() => { setShowAllEntries(false); }, [displayDoc, projectionPath.join('.')]);
+
+  const hasMoreEntries = entries.length > ENTRY_RENDER_CAP && !showAllEntries;
+  const visibleEntries = hasMoreEntries ? entries.slice(0, ENTRY_RENDER_CAP) : entries;
 
   // ── 탐색 — goSibling 패턴 ─────────────────────────────────────────────────
 
@@ -185,6 +199,14 @@ export function JsonLevelColumn({
   // 동시에 열린다. editingId는 전역(useExplorerState)에서 하나만 관리되므로
   // 컬럼별로 구분 가능한 값이어야 한다.
   const addFieldEditingId = `field:${path.comp.id}:__new__:${projectionPath.join('.')}`;
+
+  // 컬럼 전체에 파일을 드롭하면 "필드 추가" 에디터를 열고 그 파일을 업로드한 것처럼 처리
+  const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
+  const { isDragOver: isColumnDragOver, dragHandlers } = useFileDrop((file) => {
+    if (!canAddField) return;
+    onSetEditingId(addFieldEditingId);
+    setPendingImportFile(file);
+  });
 
   // 현재 편집 중인 필드가 REF oid라면, InlineSegmentEditor에 어떤 문서를 참조 중인지 전달
   const [editingRefInfo, setEditingRefInfo] = useState<ReferenceInfo | null>(null);
@@ -381,6 +403,7 @@ export function JsonLevelColumn({
         isExpandable={isExpandable || isOidRef}
         isEditable={isEditable}
         isHighlighted={isHighlighted}
+        reduceMotion={reduceMotion}
         onEdit={() => onSetEditingId(editorId)}
         onClick={handleClick}
       >
@@ -392,7 +415,9 @@ export function JsonLevelColumn({
   // ── 렌더 ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col min-h-0 flex-1">
+    <div className="relative flex flex-col min-h-0 flex-1" {...dragHandlers}>
+      <DropOverlay visible={isColumnDragOver} label={canAddField ? '파일을 놓아 필드로 가져오기' : '여기엔 필드를 추가할 수 없음'} />
+
       {/* Ref 강조 — 상단 컬러 바 */}
       {chainColor && (
         <div
@@ -427,8 +452,18 @@ export function JsonLevelColumn({
           <p className="flex-1 flex items-center justify-center text-sm text-slate-400 py-10">문서를 선택하세요</p>
         ) : (
           <AnimatePresence>
-            {entries.map(({ key, value }) => renderField(key, value))}
+            {visibleEntries.map(({ key, value }) => renderField(key, value))}
           </AnimatePresence>
+        )}
+
+        {hasMoreEntries && (
+          <button
+            type="button"
+            className="mx-1 my-1 px-3 py-2.5 rounded-2xl text-sm font-medium text-slate-500 bg-slate-50 hover:bg-slate-100 transition-colors"
+            onClick={() => setShowAllEntries(true)}
+          >
+            전체 {entries.length.toLocaleString()}개 중 {ENTRY_RENDER_CAP.toLocaleString()}개 표시 · 더 보기
+          </button>
         )}
 
         {/* 필드 추가 — object/array 노드면 depth 무관하게 항상 표시 */}
@@ -465,6 +500,8 @@ export function JsonLevelColumn({
                 onSetEditingId(null);
               }}
               onCancel={() => onSetEditingId(null)}
+              pendingImportFile={pendingImportFile}
+              onPendingImportFileConsumed={() => setPendingImportFile(null)}
             />
           ) : (
             <AddItemButton
@@ -473,6 +510,7 @@ export function JsonLevelColumn({
               buttonClassName="group flex items-center gap-3 px-4 py-3.5 rounded-2xl cursor-pointer hover:bg-slate-50/80 active:bg-slate-100/50 transition-colors"
               iconClassName="shrink-0 w-9 h-9 rounded-xl flex items-center justify-center border border-dashed border-slate-300 text-slate-400 group-hover:border-emerald-300 group-hover:text-emerald-500 transition-colors"
               textClassName="text-sm font-medium text-slate-400 group-hover:text-emerald-600 transition-colors"
+              reduceMotion={reduceMotion}
             />
           )
         )}

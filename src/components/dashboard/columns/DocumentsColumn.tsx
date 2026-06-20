@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import type { ActivePath, CollectionSummary, Document, DocumentSummary, MockMutationRequest } from '../../../types/explorer';
 import { ColumnItem, ColumnSkeletonList } from './ColumnItem';
 import { AddItemButton } from './AddItemButton';
+import { DropOverlay } from './DropOverlay';
 import { InlineSegmentEditor } from '../../editors/InlineSegmentEditor';
 import { DeleteConfirmModal } from '../../common/DeleteConfirmModal';
 import { generateObjectId } from '../../../utils/objectId';
@@ -11,6 +12,7 @@ import { cn } from '../../../utils/cn';
 import { getFullDocumentById } from '../../../services/mockAPI';
 import { columnListStyles as styles } from './columnListStyles';
 import { isPathChanged } from '../../../utils/changedPaths';
+import { useFileDrop } from '../../../hooks/useFileDrop';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -24,6 +26,7 @@ interface DocumentsColumnProps {
   editingId: string | null;
   activeCollectionName: string | null;
   activeDatabaseName: string | null;
+  reduceMotion?: boolean;
   onSelectDocument: (oid: string, title: string) => Promise<void>;
   onMutate: (op: MockMutationRequest) => Promise<unknown>;
   onSetEditingId: (id: string | null) => void;
@@ -41,16 +44,24 @@ export function DocumentsColumn({
   editingId,
   activeCollectionName,
   activeDatabaseName,
+  reduceMotion,
   onSelectDocument,
   onMutate,
   onSetEditingId,
 }: DocumentsColumnProps) {
   const [deleteTarget, setDeleteTarget] = useState<DocumentSummary | null>(null);
+  const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
   const collectionLabel = path.kind === 'normal' ? path.label : '';
   const currentTitleKey = collections.find((c) => c.name === activeCollectionName)?.titleKey;
 
   const [isEditingTitleKey, setIsEditingTitleKey] = useState(false);
   const [titleKeyInput, setTitleKeyInput] = useState('');
+
+  // 컬럼 전체에 파일을 드롭하면 "문서 추가" 에디터를 열고 그 파일을 업로드한 것처럼 처리
+  const { isDragOver: isColumnDragOver, dragHandlers } = useFileDrop((file) => {
+    onSetEditingId('document:__new__');
+    setPendingImportFile(file);
+  });
 
   const handleDeleteDocument = async () => {
     if (!deleteTarget || !activeCollectionName || !activeDatabaseName) return;
@@ -75,7 +86,9 @@ export function DocumentsColumn({
   };
 
   return (
-    <div className={styles.container}>
+    <div className={styles.container} {...dragHandlers}>
+      <DropOverlay visible={isColumnDragOver} label="파일을 놓아 문서로 가져오기" />
+
       {/* 헤더 */}
       <div className={styles.header}>
         {isEditingTitleKey ? (
@@ -186,6 +199,7 @@ export function DocumentsColumn({
                 isActive={activeDocumentOid === doc.id}
                 isHighlighted={isHighlighted}
                 variant="document"
+                reduceMotion={reduceMotion}
                 onSelect={() => void onSelectDocument(doc.id, doc.title)}
                 onEdit={() => onSetEditingId(`document:${doc.id}`)}
                 onDelete={() => setDeleteTarget(doc)}
@@ -226,6 +240,8 @@ export function DocumentsColumn({
               onSetEditingId(null);
             }}
             onCancel={() => onSetEditingId(null)}
+            pendingImportFile={pendingImportFile}
+            onPendingImportFileConsumed={() => setPendingImportFile(null)}
           />
         ) : (
           <AddItemButton
@@ -234,6 +250,7 @@ export function DocumentsColumn({
             buttonClassName={styles.addCard}
             iconClassName={styles.addCardIcon}
             textClassName={styles.addCardText}
+            reduceMotion={reduceMotion}
           />
         )}
         {!documents.length && (

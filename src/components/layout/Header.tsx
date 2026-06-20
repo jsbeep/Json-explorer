@@ -14,7 +14,7 @@ type HeaderProps = Pick<
 
 const styles = {
   header:
-    'flex min-h-14 w-full items-center border-b border-slate-200/80 bg-white/85 px-3 backdrop-blur-md rounded-[14px] shadow-[0_8px_30px_rgba(15,23,42,0.04)]',
+    'flex min-h-14 w-full items-center border-b border-slate-200/80 bg-white/85 px-3 backdrop-blur-md rounded-[14px] shadow-soft',
   inner: 'flex w-full min-w-0 items-center gap-3',
   left: 'flex min-w-0 items-center gap-2.5',
   logoMark:

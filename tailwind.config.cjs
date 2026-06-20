@@ -21,11 +21,13 @@ module.exports = {
         }
       },
       boxShadow: {
-        panel: '0 18px 50px rgba(15, 23, 42, 0.08)',
+        soft: '0 1px 10px rgba(15, 23, 42, 0.04)',
+        panel: '0 1px 18px rgba(188, 194, 195, 0.16)',
+        elevated: '0 14px 30px rgba(15, 23, 42, 0.1)',
         glow: '0 0 0 1px rgba(34, 197, 94, 0.12), 0 16px 36px rgba(34, 197, 94, 0.14)'
       },
       backgroundImage: {
-        'grid-fade': 'radial-gradient(circle at top, rgba(34, 197, 94, 0.12), transparent 42%), linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(243, 247, 251, 1))'
+        'grid-fade': 'radial-gradient(circle at center, rgba(34, 197, 94, 0.12), transparent 42%), linear-gradient(180deg, #f0f4f8, rgba(243, 247, 251, 1))'
       }
     }
   },

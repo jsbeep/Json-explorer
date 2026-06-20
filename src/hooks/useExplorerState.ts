@@ -406,6 +406,11 @@ export function useExplorerState(): UseExplorerStateResult {
       } else if ('collection' in op && typeof op.collection === 'string' && activeCollectionRef.current === op.collection) {
         const docs = await getDocuments(op.collection);
         setDocuments(docs);
+        // 문서 추가/삭제/수정으로 컬렉션 용량(sizeMb)·문서 수가 바뀌므로 컬렉션 메타도 같이 갱신
+        if ('database' in op && typeof op.database === 'string') {
+          const cols = await getCollections(op.database);
+          setCollections(cols);
+        }
         // 열린 문서 갱신
         if (activeDocumentOidRef.current && op.type === 'mutateField') {
           const doc = await getFullDocumentById(activeDocumentOidRef.current);
@@ -536,7 +541,7 @@ export function useExplorerState(): UseExplorerStateResult {
         const docs = await getDocuments(activeCollectionRef.current);
         setDocuments(docs);
         if (activeDocumentOidRef.current) {
-          const doc = await getDocumentById(activeDocumentOidRef.current);
+          const doc = await getFullDocumentById(activeDocumentOidRef.current);
           setOpenDocument(doc);
         }
       }

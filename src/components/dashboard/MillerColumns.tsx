@@ -11,6 +11,9 @@ import type { ActivePath } from '../../types/explorer';
 
 const FLEX_RATIOS = [3, 3, 4] as const;
 
+// 컬렉션 용량이 이 값(MB)을 넘으면 layout 애니메이션 비용을 줄이기 위해 애니메이션을 끈다
+const ANIMATION_DISABLE_THRESHOLD_MB = 0.5;
+
 // ── 애니메이션 variants ────────────────────────────────────────────────────────
 
 const colVariants = {
@@ -109,6 +112,12 @@ export function MillerColumns({
     return cp?.kind === 'normal' ? (cp.databaseName ?? null) : null;
   }, [activePaths]);
 
+  // 조회 중인 컬렉션이 무거우면 layout 애니메이션을 끈다 (FLIP 재계산 비용 절감)
+  const reduceMotion = useMemo(() => {
+    const sizeMb = collections.find((c) => c.name === activeCollectionName)?.sizeMb ?? 0;
+    return sizeMb > ANIMATION_DISABLE_THRESHOLD_MB;
+  }, [collections, activeCollectionName]);
+
   return (
     <div className="relative flex h-full w-full gap-3 overflow-hidden rounded-2xl p-3">
       <AnimatePresence initial={false} mode="popLayout" custom={direction}>
@@ -125,14 +134,14 @@ export function MillerColumns({
               initial="enter"
               animate="center"
               exit="exit"
-              transition={spring}
-              layout
+              transition={reduceMotion ? { duration: 0 } : spring}
+              layout={!reduceMotion}
               style={{ flex, zIndex: 99 - slotIndex }} // 뒤에 나올수록 zIndex 낮게
               className={[
                 'min-w-0 h-full flex flex-col rounded-2xl overflow-hidden',
                 isPlaceholder
                   ? 'border border-dashed border-slate-200 opacity-40'
-                  : 'bg-white border border-slate-200/80 shadow-[0_4px_24px_rgba(15,23,42,0.06)]',
+                  : 'bg-white border border-slate-200/80 shadow-panel',
               ].join(' ')}
             >
               {isPlaceholder ? (
@@ -141,6 +150,7 @@ export function MillerColumns({
                 <ColumnContent
                   col={col}
                   slotIndex={slotIndex}
+                  reduceMotion={reduceMotion}
                   collections={collections}
                   documents={documents}
                   openDocument={openDocument}
@@ -181,6 +191,7 @@ interface ColumnContentProps extends Omit<MillerColumnsProps, 'visibleColumns'> 
   activeCollectionName: string | null;
   activeDocumentOid: string | null;
   activeDatabaseName: string | null;
+  reduceMotion: boolean;
 }
 
 function ColumnContent({ col, slotIndex, ...rest }: ColumnContentProps) {
@@ -193,6 +204,7 @@ function ColumnContent({ col, slotIndex, ...rest }: ColumnContentProps) {
         isLoading={rest.isLoading}
         changedPaths={rest.changedPaths}
         editingId={rest.editingId}
+        reduceMotion={rest.reduceMotion}
         onSelectCollection={rest.selectCollection}
         onMutate={rest.mutate}
         onSetEditingId={rest.setEditingId}
@@ -212,6 +224,7 @@ function ColumnContent({ col, slotIndex, ...rest }: ColumnContentProps) {
         editingId={rest.editingId}
         activeCollectionName={rest.activeCollectionName}
         activeDatabaseName={rest.activeDatabaseName}
+        reduceMotion={rest.reduceMotion}
         onSelectDocument={rest.selectDocument}
         onMutate={rest.mutate}
         onSetEditingId={rest.setEditingId}
@@ -230,6 +243,7 @@ function ColumnContent({ col, slotIndex, ...rest }: ColumnContentProps) {
       activePaths={rest.activePaths}
       activeCollectionName={rest.activeCollectionName}
       activeDatabaseName={rest.activeDatabaseName}
+      reduceMotion={rest.reduceMotion}
       onPushJsonPath={rest.pushJsonPath}
       onPushReference={rest.pushReference}
       onNavigateToReference={rest.navigateToReference}

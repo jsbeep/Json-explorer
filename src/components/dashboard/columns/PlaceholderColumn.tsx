@@ -15,7 +15,7 @@ export function PlaceholderColumn({ slotIndex }: PlaceholderColumnProps) {
   const Icon = hint.icon;
 
   return (
-    <div className="flex flex-col items-center justify-center h-full gap-3 p-6 text-center">
+    <div className="flex flex-col items-center justify-center h-full gap-3 p-6 text-center bg-white">
       <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center">
         <Icon size={18} className="text-slate-400" />
       </div>

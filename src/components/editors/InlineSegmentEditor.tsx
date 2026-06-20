@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Check, X, Trash2, ChevronRight, ToggleLeft, Hash, Type, Braces, List, Link, KeyRound, Zap, RefreshCw, ClipboardPaste, Upload, CopyPlus, Download, ClipboardCopy } from 'lucide-react';
 import { cn } from '../../utils/cn';
-import { SPRING_SOFT } from '../../utils/motionPresets';
+import { SPRING_SHARP } from '../../utils/motionPresets';
 import type { JsonValue } from '../../types/explorer';
 import { getCollections, getDocuments, type ReferenceInfo } from '../../services/mockAPI';
 import { generateObjectId } from '../../utils/objectId';
@@ -54,6 +54,10 @@ interface InlineSegmentEditorProps {
   currentRefInfo?: ReferenceInfo | null;
   // edit 모드(collection/document)에서 Export 시 내보낼 전체 JSON을 비동기로 가져옴
   onExportRequest?: () => Promise<JsonValue>;
+  // 부모 컬럼 전체에 파일을 드래그&드롭했을 때 전달되는 파일 — 마운트된 이 에디터의
+  // 업로드 input을 누른 것과 동일하게 처리한다
+  pendingImportFile?: File | null;
+  onPendingImportFileConsumed?: () => void;
   onSubmit: (data: InlineSegmentEditorSubmitData) => Promise<void>;
   onCancel: () => void;
   onDelete?: () => void;
@@ -63,7 +67,7 @@ interface InlineSegmentEditorProps {
 // ── 스타일 ────────────────────────────────────────────────────────────────────
 
 const styles = {
-  container: 'mx-1 my-1 z-10 rounded-2xl bg-white ring-1 shadow-[0_4px_20px_rgba(15,23,42,0.08)]',
+  container: 'mx-1 my-1 z-10 rounded-2xl bg-white ring-1 shadow-panel',
   containerAdd: 'ring-emerald-200/70 bg-emerald-50/30',
   containerEdit: 'ring-slate-200/70',
   inner: 'p-3 flex flex-col gap-2.5',
@@ -115,6 +119,8 @@ export function InlineSegmentEditor({
   activeDatabaseName,
   currentRefInfo,
   onExportRequest,
+  pendingImportFile,
+  onPendingImportFileConsumed,
   onSubmit,
   onCancel,
   onDelete,
@@ -208,6 +214,10 @@ export function InlineSegmentEditor({
   // collection/document 레벨은 key+label만 있음
   const isSimpleLevel = level === 'collection' || level === 'document';
 
+  // 파일 붙여넣기/업로드(import) UI를 보여줄지 — collection/document는 항상,
+  // field는 추가(add) 모드에서만 (드롭한 파일을 새 필드 값으로 쓸 수 있게)
+  const canImport = isSimpleLevel || (level === 'field' && mode === 'add');
+
   // container(object/array) 수정 모드에서 raw JSON 붙여넣기 검증 — 비어있으면 기존 값 유지로 간주
   const containerJsonError = isContainerEditMode && rawValue.trim() !== '' && isInvalidJson(rawValue);
 
@@ -238,9 +248,10 @@ export function InlineSegmentEditor({
     return null;
   };
 
-  // textarea JSON 변경 → input(keyValue) 동기화
-  const syncKeyFromImportText = (text: string) => {
-    const name = extractNameFromImportJson(text);
+  // textarea JSON 변경 → input(keyValue) 동기화. JSON에 name/title이 없으면
+  // fallbackName(파일 업로드 시 파일명)으로 대신 채운다.
+  const syncKeyFromImportText = (text: string, fallbackName?: string) => {
+    const name = extractNameFromImportJson(text) ?? fallbackName ?? null;
     if (name !== null) setKeyValue(name);
   };
 
@@ -260,23 +271,36 @@ export function InlineSegmentEditor({
     }
   };
 
+  // field 레벨은 collection/document처럼 별도 import 미리보기를 쓰지 않고, 이미 있는
+  // 타입 선택기의 Object 텍스트영역(rawValue)으로 바로 채워서 같은 값 입력 UI를 재사용한다
+  const applyImportedText = (text: string, fallbackName?: string) => {
+    if (level === 'field') {
+      setSelectedType('Object');
+      setRawValue(text);
+      syncKeyFromImportText(text, fallbackName);
+      return;
+    }
+    setImportText(text);
+    syncKeyFromImportText(text, fallbackName);
+    setIsImportOpen(true);
+  };
+
   const handlePasteImport = async () => {
     try {
       const text = await navigator.clipboard.readText();
-      setImportText(text);
-      syncKeyFromImportText(text);
-    } finally {
-      setIsImportOpen(true);
+      applyImportedText(text);
+    } catch {
+      // 클립보드 읽기 실패 시에도 collection/document는 빈 미리보기를 열어 직접 입력할 수 있게 한다
+      if (level !== 'field') setIsImportOpen(true);
     }
   };
 
   const handleImportFile = (file: File) => {
     const reader = new FileReader();
+    const baseName = file.name.replace(/\.[^./]+$/, '');
     reader.onload = () => {
       const text = typeof reader.result === 'string' ? reader.result : '';
-      setImportText(text);
-      syncKeyFromImportText(text);
-      setIsImportOpen(true);
+      applyImportedText(text, baseName);
     };
     reader.readAsText(file);
   };
@@ -293,6 +317,13 @@ export function InlineSegmentEditor({
     const file = e.dataTransfer.files?.[0];
     if (file) handleImportFile(file);
   };
+
+  // 부모 컬럼 전체에 드롭한 파일 — 이 input의 업로드 버튼을 누른 것과 동일하게 처리
+  useEffect(() => {
+    if (!pendingImportFile) return;
+    handleImportFile(pendingImportFile);
+    onPendingImportFileConsumed?.();
+  }, [pendingImportFile]);
 
   // ── Export 헬퍼 ──────────────────────────────────────────────────────────────
 
@@ -364,10 +395,10 @@ export function InlineSegmentEditor({
     <motion.div
       ref={containerRef}
       layout="position"
-      initial={{ opacity: 0, height: 0 }}
-      animate={{ opacity: 1, height: 'auto' }}
-      exit={{ opacity: 0, height: 0 }}
-      transition={SPRING_SOFT}
+      initial={{ opacity: 0, y: -10, }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      transition={SPRING_SHARP}
       className={cn(
         styles.container,
         mode === 'add' ? styles.containerAdd : styles.containerEdit,
@@ -382,7 +413,7 @@ export function InlineSegmentEditor({
               type="text"
               className={cn(
                 styles.input,
-                isSimpleLevel && (mode === 'add' || (mode === 'edit' && onExportRequest)) && styles.inputWithIcons,
+                (canImport && mode === 'add') || (isSimpleLevel && mode === 'edit' && onExportRequest) ? styles.inputWithIcons : undefined,
                 isDuplicate && styles.inputError,
                 isDragOver && 'ring-2 ring-emerald-400/60 bg-emerald-50/40',
               )}
@@ -392,23 +423,23 @@ export function InlineSegmentEditor({
               onChange={(e) => {
                 const v = e.target.value;
                 setKeyValue(v);
-                if (isSimpleLevel && mode === 'add') syncImportTextFromKey(v);
+                if (canImport && mode === 'add') syncImportTextFromKey(v);
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') void handleSubmit();
                 if (e.key === 'Escape') onCancel();
-                if (isSimpleLevel && mode === 'add' && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+                if (canImport && mode === 'add' && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
                   e.preventDefault();
                   void handlePasteImport();
                 }
               }}
-              onDragOver={isSimpleLevel && mode === 'add' ? (e) => { e.preventDefault(); setIsDragOver(true); } : undefined}
-              onDragLeave={isSimpleLevel && mode === 'add' ? () => setIsDragOver(false) : undefined}
-              onDrop={isSimpleLevel && mode === 'add' ? handleInputDrop : undefined}
+              onDragOver={canImport && mode === 'add' ? (e) => { e.preventDefault(); setIsDragOver(true); } : undefined}
+              onDragLeave={canImport && mode === 'add' ? () => setIsDragOver(false) : undefined}
+              onDrop={canImport && mode === 'add' ? handleInputDrop : undefined}
             />
 
             {/* Import: 붙여넣기 / 파일 업로드 — input 내부 아이콘 */}
-            {isSimpleLevel && mode === 'add' && (
+            {canImport && mode === 'add' && (
               <div className={styles.inputIcons}>
                 <input
                   ref={fileInputRef}
@@ -490,15 +521,16 @@ export function InlineSegmentEditor({
           <p className={styles.errorMsg}>이미 존재하는 이름입니다.</p>
         )}
 
-        {/* Import 미리보기 — 붙여넣기/파일 업로드한 JSON 확인 */}
+        {/* Import 미리보기 — 붙여넣기/파일 업로드한 JSON 확인 (collection/document 전용,
+            field는 아래 타입 선택기의 Object 텍스트영역을 바로 채우므로 별도 미리보기가 없음) */}
         {isSimpleLevel && mode === 'add' && (
           <AnimatePresence>
             {isImportOpen && (
               <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={SPRING_SOFT}
+                initial={{ opacity: 0, y: -10, }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={SPRING_SHARP}
                 className="overflow-hidden"
               >
                 <div className="flex flex-col gap-1">
@@ -538,10 +570,10 @@ export function InlineSegmentEditor({
             <AnimatePresence>
               {typeAccordionOpen && (
                 <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={SPRING_SOFT}
+                  initial={{ opacity: 0, y: -10, }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={SPRING_SHARP}
                   className="flex flex-1 overflow-hidden"
                 >
                   <div className="flex flex-wrap gap-1 pb-1">

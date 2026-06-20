@@ -6,7 +6,7 @@ import { ExplorerPathSegment } from '../../types/explorer';
 import { cn } from '../../utils/cn';
 
 const styles = {
-  container: 'flex h-12 min-h-12 items-center overflow-hidden rounded-[14px] m-3 mb-0 border border-slate-200/80 bg-white/80 px-3 shadow-[0_8px_30px_rgba(15,23,42,0.04)] backdrop-blur',
+  container: 'flex h-12 min-h-12 items-center overflow-hidden rounded-[14px] m-3 mb-0 border border-slate-200/80 bg-white/80 px-3 shadow-soft backdrop-blur',
   track: 'flex w-full items-center gap-0.5 overflow-x-auto whitespace-nowrap scroll-smooth',
   trackScroll: 'scrollbar-hide',
   empty: 'text-[13px] font-medium text-slate-400',

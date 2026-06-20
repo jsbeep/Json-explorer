@@ -15,6 +15,7 @@ export interface ColumnItemProps {
   isLoading?: boolean;
   isHighlighted?: boolean;
   variant: 'collection' | 'document';
+  reduceMotion?: boolean;
   onSelect: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
@@ -30,6 +31,7 @@ export function ColumnItem({
   isLoading = false,
   isHighlighted = false,
   variant,
+  reduceMotion = false,
   onSelect,
   onEdit,
   onDelete,
@@ -53,7 +55,7 @@ export function ColumnItem({
   return (
     <m.div
       ref={ref}
-      layout
+      layout={!reduceMotion}
       className={cn(
         'relative flex items-center gap-3 px-4 py-3.5 rounded-2xl cursor-pointer select-none transition-colors',
         isActive

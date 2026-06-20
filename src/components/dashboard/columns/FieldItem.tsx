@@ -12,20 +12,21 @@ export interface FieldItemProps {
   isExpandable: boolean;
   isEditable: boolean;
   isHighlighted: boolean;
+  reduceMotion?: boolean;
   onEdit: () => void;
   onClick: (() => void) | null;
   children: ReactNode;
 }
 
 export function FieldItem({
-  fieldKey, isId, isExpandable, isEditable, isHighlighted,
+  fieldKey, isId, isExpandable, isEditable, isHighlighted, reduceMotion = false,
   onEdit, onClick, children,
 }: FieldItemProps) {
   const { hovered, hoverHandlers } = useHover();
 
   return (
     <m.div
-      layout
+      layout={!reduceMotion}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}

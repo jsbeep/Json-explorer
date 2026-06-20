@@ -4,11 +4,14 @@ import { createPortal } from 'react-dom';
 import type { ActivePath, CollectionSummary, Document, JsonValue, MockMutationRequest } from '../../../types/explorer';
 import { ColumnItem, ColumnSkeletonList } from './ColumnItem';
 import { AddItemButton } from './AddItemButton';
+import { DropOverlay } from './DropOverlay';
 import { InlineSegmentEditor } from '../../editors/InlineSegmentEditor';
 import { DeleteConfirmModal } from '../../common/DeleteConfirmModal';
 import { getSnapshot } from '../../../services/mockStorage';
 import { columnListStyles as styles } from './columnListStyles';
 import { isPathChanged } from '../../../utils/changedPaths';
+import { generateObjectId } from '../../../utils/objectId';
+import { useFileDrop } from '../../../hooks/useFileDrop';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -19,6 +22,7 @@ interface CollectionsColumnProps {
   isLoading: boolean;
   changedPaths: string[];
   editingId: string | null;
+  reduceMotion?: boolean;
   onSelectCollection: (name: string, label: string) => Promise<void>;
   onMutate: (op: MockMutationRequest) => Promise<unknown>;
   onSetEditingId: (id: string | null) => void;
@@ -33,12 +37,20 @@ export function CollectionsColumn({
   isLoading,
   changedPaths,
   editingId,
+  reduceMotion,
   onSelectCollection,
   onMutate,
   onSetEditingId,
 }: CollectionsColumnProps) {
   const [deleteTarget, setDeleteTarget] = useState<CollectionSummary | null>(null);
+  const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
   const databaseName = path.kind === 'normal' ? (path.databaseName ?? '') : '';
+
+  // 컬럼 전체에 파일을 드롭하면 "컬렉션 추가" 에디터를 열고 그 파일을 업로드한 것처럼 처리
+  const { isDragOver: isColumnDragOver, dragHandlers } = useFileDrop((file) => {
+    onSetEditingId('collection:__new__');
+    setPendingImportFile(file);
+  });
 
   const handleAddCollection = async (name: string, label: string, description: string) => {
     await onMutate({
@@ -60,7 +72,9 @@ export function CollectionsColumn({
   };
 
   return (
-    <div className={styles.container}>
+    <div className={styles.container} {...dragHandlers}>
+      <DropOverlay visible={isColumnDragOver} label="파일을 놓아 컬렉션으로 가져오기" />
+
       {/* 헤더 */}
       <div className={styles.header}>
         <Layers size={14} className={styles.headerIcon} />
@@ -120,10 +134,11 @@ export function CollectionsColumn({
               <ColumnItem
                 key={col.name}
                 label={col.label}
-                meta={`${col.documentCount}개 문서 · ${col.sizeMb}MB`}
+                meta={`${col.documentCount}개 문서 · ${col.sizeMb === 0.01 ? '< 0.01' : col.sizeMb.toFixed(2)}MB`}
                 isActive={activeCollectionName === col.name}
                 isHighlighted={isHighlighted}
                 variant="collection"
+                reduceMotion={reduceMotion}
                 onSelect={() => void onSelectCollection(col.name, col.label)}
                 onEdit={() => onSetEditingId(`collection:${col.name}`)}
                 onDelete={() => setDeleteTarget(col)}
@@ -140,7 +155,16 @@ export function CollectionsColumn({
             siblingKeys={collections.map((c) => c.name)}
             onSubmit={async (data) => {
               if (data.importedJson && typeof data.importedJson === 'object' && !Array.isArray(data.importedJson)) {
-                const imported = data.importedJson as { name?: string; label?: string; description?: string; documents?: Document[] };
+                const imported = data.importedJson as { name?: string; label?: string; description?: string; documents?: Document[]; _id?: unknown };
+                // documents 배열이 없으면 컬렉션 envelope가 아니라 문서 1개를 붙여넣은 것으로 간주하고 그대로 감싼다
+                const hasValidOid = imported._id && typeof imported._id === 'object' && !Array.isArray(imported._id) &&
+                  typeof (imported._id as Record<string, unknown>).$oid === 'string';
+                const documents = Array.isArray(imported.documents)
+                  ? imported.documents
+                  : [{
+                      ...(data.importedJson as Document),
+                      _id: hasValidOid ? (imported._id as Document['_id']) : { $oid: generateObjectId() },
+                    }];
                 await onMutate({
                   type: 'createCollection',
                   database: databaseName,
@@ -148,7 +172,7 @@ export function CollectionsColumn({
                     name: imported.name ?? data.key,
                     label: imported.label ?? data.label ?? data.key,
                     description: imported.description ?? '',
-                    documents: Array.isArray(imported.documents) ? imported.documents : [],
+                    documents,
                   },
                 });
                 onSetEditingId(null);
@@ -157,6 +181,8 @@ export function CollectionsColumn({
               await handleAddCollection(data.key, data.label ?? data.key, '');
             }}
             onCancel={() => onSetEditingId(null)}
+            pendingImportFile={pendingImportFile}
+            onPendingImportFileConsumed={() => setPendingImportFile(null)}
           />
         ) : (
           <AddItemButton
@@ -165,6 +191,7 @@ export function CollectionsColumn({
             buttonClassName={styles.addCard}
             iconClassName={styles.addCardIcon}
             textClassName={styles.addCardText}
+            reduceMotion={reduceMotion}
           />
         )}
         {!collections.length && (
