@@ -417,7 +417,7 @@ export function InlineSegmentEditor({
                 isDuplicate && styles.inputError,
                 isDragOver && 'ring-2 ring-emerald-400/60 bg-emerald-50/40',
               )}
-              placeholder={level === 'collection' ? 'Collection name (English)' : level === 'document' ? 'Document name' : 'Key name'}
+              placeholder={level === 'collection' ? 'Collection name (Drop file here)' : level === 'document' ? 'Document name (Drop file here)' : 'Key name'}
               value={keyValue}
               disabled={mode === 'add' && keyValue.trim() !== '' && !Number.isNaN(Number(keyValue))}
               onChange={(e) => {

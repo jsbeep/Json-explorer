@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { m, AnimatePresence } from 'framer-motion';
-import { Pencil, ChevronRight } from 'lucide-react';
+import { Pencil, ChevronRight, Zap } from 'lucide-react';
 import { cn } from '../../../utils/cn';
 import { SPRING_HOVER } from '../../../utils/motionPresets';
 import { useHover } from '../../../hooks/useHover';
@@ -14,6 +14,7 @@ export interface ColumnItemProps {
   isActive: boolean;
   isLoading?: boolean;
   isHighlighted?: boolean;
+  isHeavy?: boolean;
   variant: 'collection' | 'document';
   reduceMotion?: boolean;
   onSelect: () => void;
@@ -30,6 +31,7 @@ export function ColumnItem({
   isActive,
   isLoading = false,
   isHighlighted = false,
+  isHeavy = false,
   variant,
   reduceMotion = false,
   onSelect,
@@ -104,10 +106,15 @@ export function ColumnItem({
         </p>
         {meta && (
           <p className={cn(
-            'text-xs truncate mt-0.5',
+            'flex items-center gap-2 text-xs truncate mt-0.5',
             isActive ? 'text-emerald-500' : 'text-slate-400',
           )}>
-            {meta}
+            <span className="truncate">{meta}</span>
+            {isHeavy && (
+              <span title="Large collection — animations disabled" className="shrink-0">
+                <Zap size={11} className={isActive ? 'text-emerald-400' : 'text-amber-400'} aria-hidden="true" />
+              </span>
+            )}
           </p>
         )}
       </div>

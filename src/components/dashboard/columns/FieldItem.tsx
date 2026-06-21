@@ -12,6 +12,7 @@ export interface FieldItemProps {
   isExpandable: boolean;
   isEditable: boolean;
   isHighlighted: boolean;
+  isActive?: boolean;
   reduceMotion?: boolean;
   onEdit: () => void;
   onClick: (() => void) | null;
@@ -19,7 +20,7 @@ export interface FieldItemProps {
 }
 
 export function FieldItem({
-  fieldKey, isId, isExpandable, isEditable, isHighlighted, reduceMotion = false,
+  fieldKey, isId, isExpandable, isEditable, isHighlighted, isActive = false, reduceMotion = false,
   onEdit, onClick, children,
 }: FieldItemProps) {
   const { hovered, hoverHandlers } = useHover();
@@ -34,14 +35,27 @@ export function FieldItem({
       className={cn(
         'relative flex items-center gap-3 px-4 py-3.5 rounded-2xl',
         onClick ? 'cursor-pointer hover:bg-slate-50/80 active:bg-slate-100/60' : 'cursor-default',
-        isHighlighted ? 'bg-emerald-50/40' : '',
+        isActive ? 'bg-emerald-50/70' : isHighlighted ? 'bg-emerald-50/40' : '',
       )}
       {...hoverHandlers}
       onClick={onClick ?? undefined}
     >
+      {/* 현재 펼쳐진 경로(다음 컬럼으로 이어지는 필드) 표시용 좌측 인디케이터 */}
+      <AnimatePresence>
+        {isActive && (
+          <m.span
+            className="absolute left-1.5 -translate-y-1/2 w-0.5 h-8 rounded-full bg-emerald-500"
+            initial={{ scaleY: 0, opacity: 0 }}
+            animate={{ scaleY: 1, opacity: 1 }}
+            exit={{ scaleY: 0, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+          />
+        )}
+      </AnimatePresence>
+
       <span className={cn(
         'text-[13px] py-1.5 font-mono font-medium shrink-0 w-[20%] truncate',
-        isId ? 'text-slate-400' : 'text-slate-500',
+        isActive ? 'text-emerald-700' : isId ? 'text-slate-400' : 'text-slate-500',
       )}>
         {fieldKey}
       </span>
@@ -57,7 +71,7 @@ export function FieldItem({
             transition={SPRING_HOVER}
             className="mr-1"
           >
-            <ChevronRight size={15} className="text-slate-300" />
+            <ChevronRight size={15} className={isActive ? 'text-emerald-400' : 'text-slate-300'} />
           </m.span>
         )}
         {isEditable && (

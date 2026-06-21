@@ -46,6 +46,8 @@ export default function ExplorerPage() {
     uniqueOids,
     visibleColumns,
     breadcrumbs,
+    maxVisibleColumns,
+    setMaxVisibleColumns,
     selectDatabase,
     selectCollection,
     selectDocument,
@@ -73,6 +75,8 @@ export default function ExplorerPage() {
           databases={databases}
           selectDatabase={selectDatabase}
           mutate={mutate}
+          maxVisibleColumns={maxVisibleColumns}
+          setMaxVisibleColumns={setMaxVisibleColumns}
           onRefresh={() => void refresh()}
         />
 

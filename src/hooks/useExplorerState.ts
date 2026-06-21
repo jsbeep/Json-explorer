@@ -35,6 +35,9 @@ export type { ToastMessage };
 
 const CHAIN_COLORS = ['#f59e0b', '#8b5cf6', '#3b82f6', '#ec4899', '#14b8a6'] as const;
 
+export const MIN_VISIBLE_COLUMNS = 3;
+export const MAX_VISIBLE_COLUMNS = 6;
+
 let pathIdCounter = 0;
 export const nextPathId = () => ++pathIdCounter;
 
@@ -58,8 +61,10 @@ export interface UseExplorerStateResult {
   // 파생값
   visibleColumns: (ActivePath | null)[];
   breadcrumbs: ExplorerPathSegment[];
+  maxVisibleColumns: number;
 
   // 액션
+  setMaxVisibleColumns: (count: number) => void;
   initialize: () => Promise<void>;
   selectDatabase: (name: string) => Promise<void>;
   selectCollection: (name: string, label: string) => Promise<void>;
@@ -92,6 +97,12 @@ export function useExplorerState(): UseExplorerStateResult {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [changedPaths, setChangedPaths] = useState<string[]>([]);
+  const [maxVisibleColumns, setMaxVisibleColumnsState] = useState(MIN_VISIBLE_COLUMNS);
+
+  const setMaxVisibleColumns = useCallback((count: number) => {
+    const clamped = Math.min(MAX_VISIBLE_COLUMNS, Math.max(MIN_VISIBLE_COLUMNS, count));
+    setMaxVisibleColumnsState(clamped);
+  }, []);
 
   const { toast, showToast, dismissToast } = useToast();
   const { uniqueOids, registerUniqueOid, unregisterUniqueOid } = useUniqueOidRegistry();
@@ -114,10 +125,10 @@ export function useExplorerState(): UseExplorerStateResult {
   // ── 파생값 ──────────────────────────────────────────────────────────────────
 
   const visibleColumns = useMemo<(ActivePath | null)[]>(() => {
-    const last3 = activePaths.slice(-3);
-    const padding = Array(Math.max(0, 3 - last3.length)).fill(null) as null[];
-    return [...last3, ...padding]; // 왼쪽 정렬: 실제 컬럼 먼저, placeholder 오른쪽
-  }, [activePaths]);
+    const lastN = activePaths.slice(-maxVisibleColumns);
+    const padding = Array(Math.max(0, maxVisibleColumns - lastN.length)).fill(null) as null[];
+    return [...lastN, ...padding]; // 왼쪽 정렬: 실제 컬럼 먼저, placeholder 오른쪽
+  }, [activePaths, maxVisibleColumns]);
 
   const breadcrumbs = useMemo<ExplorerPathSegment[]>(() => {
     const segs: ExplorerPathSegment[] = [];
@@ -576,6 +587,8 @@ export function useExplorerState(): UseExplorerStateResult {
     uniqueOids,
     visibleColumns,
     breadcrumbs,
+    maxVisibleColumns,
+    setMaxVisibleColumns,
     initialize,
     selectDatabase,
     selectCollection,

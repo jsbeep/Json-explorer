@@ -1,13 +1,20 @@
 // path: src/components/layout/Header.tsx
-import { Circle, RefreshCw } from 'lucide-react';
+import { useState } from 'react';
+import { Circle, Minus, Plus, RefreshCw } from 'lucide-react';
 import { motion } from 'framer-motion';
-import type { UseExplorerStateResult } from '../../hooks/useExplorerState';
+import { MIN_VISIBLE_COLUMNS, MAX_VISIBLE_COLUMNS, type UseExplorerStateResult } from '../../hooks/useExplorerState';
 import { cn } from '../../utils/cn';
 import { DatabaseDropdown } from './DatabaseDropdown';
 
 type HeaderProps = Pick<
   UseExplorerStateResult,
-  'activeDatabase' | 'connectionStatus' | 'databases' | 'selectDatabase' | 'mutate'
+  | 'activeDatabase'
+  | 'connectionStatus'
+  | 'databases'
+  | 'selectDatabase'
+  | 'mutate'
+  | 'maxVisibleColumns'
+  | 'setMaxVisibleColumns'
 > & {
   onRefresh: () => void;
 };
@@ -32,6 +39,11 @@ const styles = {
   refreshBadge:
     'absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full border border-white bg-white shadow-[0_0_0_1px_rgba(255,255,255,1)]',
   refreshBadgeDot: 'h-2.5 w-2.5',
+  stepperWrap:
+    'flex shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-white px-1 py-1',
+  stepperButton:
+    'inline-flex h-7 w-7 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent',
+  stepperValue: 'w-4 text-center text-sm font-semibold tabular-nums text-slate-700',
 } as const;
 
 const STATUS_STYLES: Record<UseExplorerStateResult['connectionStatus'], { color: string; label: string }> = {
@@ -59,9 +71,17 @@ export function Header({
   databases,
   selectDatabase,
   mutate,
+  maxVisibleColumns,
+  setMaxVisibleColumns,
   onRefresh,
 }: HeaderProps) {
   const status = STATUS_STYLES[connectionStatus];
+  const [rotation, setRotation] = useState(0);
+
+  const handleRefresh = () => {
+    setRotation((current) => current + 360);
+    onRefresh();
+  };
 
   return (
     <motion.header
@@ -84,15 +104,42 @@ export function Header({
         </div>
 
         <div className={styles.right}>
+          <div className={styles.stepperWrap} role="group" aria-label="Visible column count">
+            <button
+              type="button"
+              className={styles.stepperButton}
+              onClick={() => setMaxVisibleColumns(maxVisibleColumns - 1)}
+              disabled={maxVisibleColumns <= MIN_VISIBLE_COLUMNS}
+              aria-label="Show fewer columns"
+            >
+              <Minus size={14} />
+            </button>
+            <span className={styles.stepperValue}>{maxVisibleColumns}</span>
+            <button
+              type="button"
+              className={styles.stepperButton}
+              onClick={() => setMaxVisibleColumns(maxVisibleColumns + 1)}
+              disabled={maxVisibleColumns >= MAX_VISIBLE_COLUMNS}
+              aria-label="Show more columns"
+            >
+              <Plus size={14} />
+            </button>
+          </div>
           <div className={styles.refreshWrap}>
             <motion.button
               type="button"
               className={styles.refreshButton}
-              onClick={onRefresh}
+              onClick={handleRefresh}
               whileTap={{ scale: 0.98 }}
               aria-label="Refresh current database view"
             >
-              <RefreshCw size={16} aria-hidden="true" />
+              <motion.span
+                className="inline-flex"
+                animate={{ rotate: rotation }}
+                transition={{ duration: 0.8, ease: 'easeInOut' }}
+              >
+                <RefreshCw size={16} aria-hidden="true" />
+              </motion.span>
             </motion.button>
             <span className={styles.refreshBadge} aria-hidden="true">
               <Circle className={cn(styles.refreshBadgeDot, status.color)} fill="currentColor" stroke="none" />

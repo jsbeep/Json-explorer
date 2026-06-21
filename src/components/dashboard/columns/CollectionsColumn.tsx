@@ -12,6 +12,7 @@ import { columnListStyles as styles } from './columnListStyles';
 import { isPathChanged } from '../../../utils/changedPaths';
 import { generateObjectId } from '../../../utils/objectId';
 import { useFileDrop } from '../../../hooks/useFileDrop';
+import { ANIMATION_DISABLE_THRESHOLD_MB } from '../../../utils/motionPresets';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -137,6 +138,7 @@ export function CollectionsColumn({
                 meta={`${col.documentCount} docs · ${col.sizeMb === 0.01 ? '< 0.01' : col.sizeMb.toFixed(2)}MB`}
                 isActive={activeCollectionName === col.name}
                 isHighlighted={isHighlighted}
+                isHeavy={col.sizeMb > ANIMATION_DISABLE_THRESHOLD_MB}
                 variant="collection"
                 reduceMotion={reduceMotion}
                 onSelect={() => void onSelectCollection(col.name, col.label)}
@@ -197,7 +199,7 @@ export function CollectionsColumn({
         {!collections.length && (
           <div className={styles.empty}>
             <Layers size={28} className="opacity-30" />
-            <span>No collections</span>
+            <span>Drag and drop a JSON file here to create a collection</span>
           </div>
         )}
       </div>

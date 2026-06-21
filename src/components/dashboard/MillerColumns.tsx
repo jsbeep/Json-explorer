@@ -6,13 +6,13 @@ import { DocumentsColumn } from './columns/DocumentsColumn';
 import { JsonLevelColumn } from './columns/JsonLevelColumn';
 import { PlaceholderColumn } from './columns/PlaceholderColumn';
 import type { ActivePath } from '../../types/explorer';
+import { ANIMATION_DISABLE_THRESHOLD_MB } from '../../utils/motionPresets';
 
 // ── 상수 ──────────────────────────────────────────────────────────────────────
 
-const FLEX_RATIOS = [3, 3, 4] as const;
-
-// 컬렉션 용량이 이 값(MB)을 넘으면 layout 애니메이션 비용을 줄이기 위해 애니메이션을 끈다
-const ANIMATION_DISABLE_THRESHOLD_MB = 0.5;
+// 마지막 컬럼만 살짝 더 넓게, 나머지는 동일 비율 (컬럼 수가 가변이라 슬롯 개수에 맞춰 생성)
+const getFlexRatios = (count: number): number[] =>
+  Array.from({ length: count }, (_, i) => (i === count - 1 ? 4 : 3));
 
 // ── 애니메이션 variants ────────────────────────────────────────────────────────
 
@@ -118,11 +118,13 @@ export function MillerColumns({
     return sizeMb > ANIMATION_DISABLE_THRESHOLD_MB;
   }, [collections, activeCollectionName]);
 
+  const flexRatios = useMemo(() => getFlexRatios(visibleColumns.length), [visibleColumns.length]);
+
   return (
     <div className="relative flex h-full w-full gap-3 overflow-hidden rounded-2xl p-3">
       <AnimatePresence initial={false} mode="popLayout" custom={direction}>
         {visibleColumns.map((col, slotIndex) => {
-          const flex = FLEX_RATIOS[slotIndex];
+          const flex = flexRatios[slotIndex];
           const isPlaceholder = col === null;
           const key = isPlaceholder ? `ph-${slotIndex}` : `col-${col.comp.id}`;
 
@@ -149,6 +151,7 @@ export function MillerColumns({
               ) : (
                 <ColumnContent
                   col={col}
+                  visibleLength={visibleColumns.length}
                   slotIndex={slotIndex}
                   reduceMotion={reduceMotion}
                   collections={collections}
@@ -187,6 +190,7 @@ export function MillerColumns({
 
 interface ColumnContentProps extends Omit<MillerColumnsProps, 'visibleColumns'> {
   col: ActivePath;
+  visibleLength: number;
   slotIndex: number;
   activeCollectionName: string | null;
   activeDocumentOid: string | null;
@@ -194,7 +198,7 @@ interface ColumnContentProps extends Omit<MillerColumnsProps, 'visibleColumns'> 
   reduceMotion: boolean;
 }
 
-function ColumnContent({ col, slotIndex, ...rest }: ColumnContentProps) {
+function ColumnContent({ col, visibleLength, slotIndex, ...rest }: ColumnContentProps) {
   if (col.columnKind === 'collections') {
     return (
       <CollectionsColumn
@@ -236,6 +240,7 @@ function ColumnContent({ col, slotIndex, ...rest }: ColumnContentProps) {
     <JsonLevelColumn
       path={col}
       openDocument={rest.openDocument}
+      visibleLength={visibleLength}
       slotIndex={slotIndex}
       isLoading={rest.isLoading}
       changedPaths={rest.changedPaths}

@@ -32,6 +32,7 @@ const ENTRY_RENDER_CAP = 100;
 interface JsonLevelColumnProps {
   path: ActivePath;
   openDocument: Document | null;
+  visibleLength: number;
   slotIndex: number;
   isLoading: boolean;
   changedPaths: string[];
@@ -56,6 +57,7 @@ interface JsonLevelColumnProps {
 export function JsonLevelColumn({
   path,
   openDocument,
+  visibleLength,
   slotIndex,
   isLoading,
   changedPaths,
@@ -90,8 +92,10 @@ export function JsonLevelColumn({
     : path.projectionPath;
 
   // visibleColumns는 activePaths.slice(-3) 왼쪽 정렬 → slotIndex로 실제 index 역산
-  const myIndex = Math.max(0, activePaths.length - 3) + slotIndex;
+  const myIndex = Math.max(0, activePaths.length - visibleLength) + slotIndex;
   const hasPathsAfter = myIndex < activePaths.length - 1;
+  // 다음 컬럼이 바로 이 컬럼의 어떤 필드를 펼친 것인지 — 그 필드를 활성 경로로 표시
+  const nextActivePath = activePaths[myIndex + 1];
 
   const [refFullDoc, setRefFullDoc] = useState<Document | null>(null);
   useEffect(() => {
@@ -136,18 +140,24 @@ export function JsonLevelColumn({
   // 실질적인 소스이므로 지금은 정확하지만, myIndex 계산식을 건드리면서
   // 의존성 배열을 같이 안 고치면 stale closure가 생긴다(타입체커는 못 잡음).
   const handlePushChild = useCallback((key: string) => {
+    // isExpandable이 보장된 상태에서 발생
     const nextProj = [...projectionPath, key];
     const nextActivePath = activePaths[myIndex + 1];
     const isSamePath =
       nextActivePath &&
       JSON.stringify(nextActivePath.projectionPath) === JSON.stringify(nextProj) &&
       (refOid ? nextActivePath.kind === 'reference' : nextActivePath.kind === 'normal');
+    // 같은 경로일때는 뭐 없음
     if (isSamePath) {
-      if (activePaths.length - myIndex === 3)
-        onPopToIndex(myIndex + 1);
+      console.log('같은 경로라서 아무것도 안 함', nextProj);
+      // 0번 열이면 pop만 1번
+      if (slotIndex === 0)
+        onPopToIndex(myIndex + (visibleLength - 2));
       return;
     }
-    if (myIndex >= 0) onPopToIndex(myIndex);
+
+    // 기본값: 누른 위치까지 자르기
+    onPopToIndex(myIndex);
 
     if (refOid) {
       const child: ReferenceActivePath = {
@@ -248,6 +258,15 @@ export function JsonLevelColumn({
     // _id만 수정 불가, REF로 분류된 oid도 키 이름/참조 대상을 수정할 수 있어야 함
     const isEditable = !isId;
     const isContainer = type === 'object' || type === 'array';
+    // 이 필드를 펼쳐서 다음 컬럼이 열려있는 중인지 — handlePushChild/onPushReference가
+    // 만드는 다음 ActivePath와 같은 모양인지로 판별한다(클릭 핸들러와 동일한 비교 기준)
+    const isActive = !nextActivePath ? false
+      : isOidRef ? (nextActivePath.kind === 'reference' && nextActivePath.refOid === (value as { $oid: string }).$oid)
+      : isExpandable ? (
+          JSON.stringify(nextActivePath.projectionPath) === JSON.stringify([...projectionPath, fieldKey]) &&
+          (refOid ? nextActivePath.kind === 'reference' : nextActivePath.kind === 'normal')
+        )
+      : false;
 
     if (isEditing) {
       return (
@@ -391,7 +410,7 @@ export function JsonLevelColumn({
         };
       }
       // 비확장 필드 클릭 시 하위 컬럼이 열려있으면 닫기
-      if (hasPathsAfter) return () => onPopToIndex(myIndex + 1);
+      if (hasPathsAfter && slotIndex === 0) return () => onPopToIndex(activePaths.length - 2);
       return null;
     })();
 
@@ -403,6 +422,7 @@ export function JsonLevelColumn({
         isExpandable={isExpandable || isOidRef}
         isEditable={isEditable}
         isHighlighted={isHighlighted}
+        isActive={isActive}
         reduceMotion={reduceMotion}
         onEdit={() => onSetEditingId(editorId)}
         onClick={handleClick}
@@ -417,7 +437,6 @@ export function JsonLevelColumn({
   return (
     <div className="relative flex flex-col min-h-0 flex-1" {...dragHandlers}>
       <DropOverlay visible={isColumnDragOver} label={canAddField ? 'Drop a file to import as a field' : 'Fields cannot be added here'} />
-
       {/* Ref 강조 — 상단 컬러 바 */}
       {chainColor && (
         <div
