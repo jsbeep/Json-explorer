@@ -17,7 +17,7 @@ export default defineConfig({
     //   include: ['src']
     // })
   ],
-  base: '/Json_explorer/',
+  base: '/Json-explorer/',
   server: {
     host: '0.0.0.0',
     port: Number(env.VITE_PORT) || 5173

@@ -2,7 +2,7 @@
 # 🟢 MongoLive - JSON Explorer & Editor
 > *Miller Column-based JSON viewer & inline editor*
 ---
-> ## https://jsb0315.github.io/Json_explorer/
+> ## https://jsb0315.github.io/Json-explorer/
 > ![video-1](gif-1.gif)
 
 
