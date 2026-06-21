@@ -9,7 +9,7 @@ export function Footer() {
           © {new Date().getFullYear()} JSON Explorer & Editor. Built by jsb0315.
         </p>
         <a
-          href="https://github.com/jsb0315/Json_explorer"
+          href="https://github.com/jsb0315/json-explorer"
           target="_blank"
           rel="noreferrer"
           className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-emerald-300 hover:text-emerald-700"
