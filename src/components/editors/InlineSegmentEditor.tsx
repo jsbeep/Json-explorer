@@ -417,7 +417,7 @@ export function InlineSegmentEditor({
                 isDuplicate && styles.inputError,
                 isDragOver && 'ring-2 ring-emerald-400/60 bg-emerald-50/40',
               )}
-              placeholder={level === 'collection' ? '컬렉션 이름 (영문)' : level === 'document' ? '문서 이름' : '키 이름'}
+              placeholder={level === 'collection' ? 'Collection name (English)' : level === 'document' ? 'Document name' : 'Key name'}
               value={keyValue}
               disabled={mode === 'add' && keyValue.trim() !== '' && !Number.isNaN(Number(keyValue))}
               onChange={(e) => {
@@ -451,7 +451,7 @@ export function InlineSegmentEditor({
                 <button
                   type="button"
                   className={styles.inputIconBtn}
-                  title="클립보드에서 붙여넣기"
+                  title="Paste from clipboard"
                   onClick={() => void handlePasteImport()}
                 >
                   <ClipboardPaste size={16} />
@@ -459,7 +459,7 @@ export function InlineSegmentEditor({
                 <button
                   type="button"
                   className={styles.inputIconBtn}
-                  title="파일 업로드"
+                  title="Upload file"
                   onClick={() => fileInputRef.current?.click()}
                 >
                   <Upload size={16} />
@@ -473,7 +473,7 @@ export function InlineSegmentEditor({
                 <button
                   type="button"
                   className={styles.inputIconBtn}
-                  title="JSON 복사"
+                  title="Copy JSON"
                   onClick={() => void handleExportCopy()}
                 >
                   {exportCopied ? <Check size={16} className="text-emerald-500" /> : <ClipboardCopy size={16} />}
@@ -481,7 +481,7 @@ export function InlineSegmentEditor({
                 <button
                   type="button"
                   className={styles.inputIconBtn}
-                  title="파일로 다운로드"
+                  title="Download as file"
                   onClick={() => void handleExportDownload()}
                 >
                   <Download size={16} />
@@ -493,7 +493,7 @@ export function InlineSegmentEditor({
           {/* 액션 버튼 */}
           <div className={styles.actions}>
             {onDuplicate && (
-              <button type="button" className={cn(styles.actionBtn, styles.cancelBtn)} title="복제" onClick={onDuplicate}>
+              <button type="button" className={cn(styles.actionBtn, styles.cancelBtn)} title="Duplicate" onClick={onDuplicate}>
                 <CopyPlus size={16} />
               </button>
             )}
@@ -518,7 +518,7 @@ export function InlineSegmentEditor({
 
         {/* 중복 에러 */}
         {isDuplicate && (
-          <p className={styles.errorMsg}>이미 존재하는 이름입니다.</p>
+          <p className={styles.errorMsg}>This name already exists.</p>
         )}
 
         {/* Import 미리보기 — 붙여넣기/파일 업로드한 JSON 확인 (collection/document 전용,
@@ -541,7 +541,7 @@ export function InlineSegmentEditor({
                     value={importText}
                     onChange={(e) => { setImportText(e.target.value); syncKeyFromImportText(e.target.value); }}
                   />
-                  {importJsonError && <p className={styles.errorMsg}>유효한 JSON이 아닙니다.</p>}
+                  {importJsonError && <p className={styles.errorMsg}>Not valid JSON.</p>}
                 </div>
               </motion.div>
             )}
@@ -596,7 +596,7 @@ export function InlineSegmentEditor({
             {/* 값 입력 */}
             {selectedType === 'Boolean' ? (
               <div className={styles.row}>
-                <span className="text-xs text-slate-500">값</span>
+                <span className="text-xs text-slate-500">Value</span>
                 <button
                   type="button"
                   className={cn(
@@ -625,7 +625,7 @@ export function InlineSegmentEditor({
               <div className="flex flex-col gap-1.5">
                 {currentRefInfo && (
                   <p className="text-[11px] text-slate-400 px-0.5">
-                    현재 참조: <span className="text-slate-600 font-medium">{currentRefInfo.collectionLabel}/{currentRefInfo.documentTitle}</span>
+                    Current reference: <span className="text-slate-600 font-medium">{currentRefInfo.collectionLabel}/{currentRefInfo.documentTitle}</span>
                   </p>
                 )}
                 <div className="flex gap-1">
@@ -635,7 +635,7 @@ export function InlineSegmentEditor({
                     onClick={() => setObjectIdMode('generate')}
                   >
                     <Zap size={12} />
-                    자동 생성
+                    Auto-generate
                   </button>
                   <button
                     type="button"
@@ -643,7 +643,7 @@ export function InlineSegmentEditor({
                     onClick={() => setObjectIdMode('pick')}
                   >
                     <Link size={12} />
-                    참조 선택
+                    Pick reference
                   </button>
                 </div>
                 {objectIdMode === 'generate' ? (
@@ -653,7 +653,7 @@ export function InlineSegmentEditor({
                       type="button"
                       className={cn(styles.actionBtn, styles.cancelBtn)}
                       onClick={() => setGeneratedOid(generateObjectId())}
-                      title="재생성"
+                      title="Regenerate"
                     >
                       <RefreshCw size={16} />
                     </button>
@@ -665,7 +665,7 @@ export function InlineSegmentEditor({
                       value={refCollectionName}
                       onChange={(e) => { setRefCollectionName(e.target.value); setRefDocId(''); }}
                     >
-                      <option value="">컬렉션 선택</option>
+                      <option value="">Select collection</option>
                       {refCollections.map((c) => (
                         <option key={c.name} value={c.name}>{c.label}</option>
                       ))}
@@ -676,7 +676,7 @@ export function InlineSegmentEditor({
                       onChange={(e) => setRefDocId(e.target.value)}
                       disabled={!refCollectionName}
                     >
-                      <option value="">문서 선택</option>
+                      <option value="">Select document</option>
                       {refDocs.map((d) => (
                         <option key={d.id} value={d.id}>{d.title}</option>
                       ))}
@@ -688,7 +688,7 @@ export function InlineSegmentEditor({
               <input
                 type={selectedType === 'Number' ? 'number' : 'text'}
                 className={styles.valueInput}
-                placeholder="값"
+                placeholder="Value"
                 value={rawValue}
                 onChange={(e) => setRawValue(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') void handleSubmit(); if (e.key === 'Escape') onCancel(); }}

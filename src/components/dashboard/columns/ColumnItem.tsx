@@ -131,7 +131,7 @@ export function ColumnItem({
                       type="button"
                       className="p-1.5 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
                       onClick={onEdit}
-                      aria-label={`${label} 편집`}
+                      aria-label={`Edit ${label}`}
                     >
                       <Pencil size={16} />
                     </button>

@@ -73,7 +73,7 @@ export function CollectionsColumn({
 
   return (
     <div className={styles.container} {...dragHandlers}>
-      <DropOverlay visible={isColumnDragOver} label="파일을 놓아 컬렉션으로 가져오기" />
+      <DropOverlay visible={isColumnDragOver} label="Drop a file to import as a collection" />
 
       {/* 헤더 */}
       <div className={styles.header}>
@@ -134,7 +134,7 @@ export function CollectionsColumn({
               <ColumnItem
                 key={col.name}
                 label={col.label}
-                meta={`${col.documentCount}개 문서 · ${col.sizeMb === 0.01 ? '< 0.01' : col.sizeMb.toFixed(2)}MB`}
+                meta={`${col.documentCount} docs · ${col.sizeMb === 0.01 ? '< 0.01' : col.sizeMb.toFixed(2)}MB`}
                 isActive={activeCollectionName === col.name}
                 isHighlighted={isHighlighted}
                 variant="collection"
@@ -186,7 +186,7 @@ export function CollectionsColumn({
           />
         ) : (
           <AddItemButton
-            label="컬렉션 추가"
+            label="Add Collection"
             onClick={() => onSetEditingId('collection:__new__')}
             buttonClassName={styles.addCard}
             iconClassName={styles.addCardIcon}
@@ -197,7 +197,7 @@ export function CollectionsColumn({
         {!collections.length && (
           <div className={styles.empty}>
             <Layers size={28} className="opacity-30" />
-            <span>컬렉션 없음</span>
+            <span>No collections</span>
           </div>
         )}
       </div>

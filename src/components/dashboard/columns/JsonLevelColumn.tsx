@@ -416,7 +416,7 @@ export function JsonLevelColumn({
 
   return (
     <div className="relative flex flex-col min-h-0 flex-1" {...dragHandlers}>
-      <DropOverlay visible={isColumnDragOver} label={canAddField ? '파일을 놓아 필드로 가져오기' : '여기엔 필드를 추가할 수 없음'} />
+      <DropOverlay visible={isColumnDragOver} label={canAddField ? 'Drop a file to import as a field' : 'Fields cannot be added here'} />
 
       {/* Ref 강조 — 상단 컬러 바 */}
       {chainColor && (
@@ -435,7 +435,7 @@ export function JsonLevelColumn({
             type="button"
             className="text-[10px] font-bold px-2 py-0.5 rounded-md text-white shrink-0 tracking-wide truncate max-w-[160px] cursor-pointer hover:opacity-80 transition-opacity"
             style={{ backgroundColor: chainColor }}
-            title={refInfo ? `${refInfo.collectionLabel}/${refInfo.documentTitle} 로 이동` : undefined}
+            title={refInfo ? `Go to ${refInfo.collectionLabel}/${refInfo.documentTitle}` : undefined}
             onClick={() => refOid && void onNavigateToReference(refOid)}
           >
             {refInfo ? `${refInfo.collectionLabel}/${refInfo.documentTitle}` : 'REF'}
@@ -447,9 +447,9 @@ export function JsonLevelColumn({
       {/* 목록 */}
       <div className="flex-1 overflow-y-auto min-h-0 px-2 py-2 flex flex-col gap-0.5">
         {isLoading && !entries.length ? (
-          <p className="flex-1 flex items-center justify-center text-sm text-slate-400 py-10">불러오는 중…</p>
+          <p className="flex-1 flex items-center justify-center text-sm text-slate-400 py-10">Loading…</p>
         ) : !displayDoc ? (
-          <p className="flex-1 flex items-center justify-center text-sm text-slate-400 py-10">문서를 선택하세요</p>
+          <p className="flex-1 flex items-center justify-center text-sm text-slate-400 py-10">Select a document</p>
         ) : (
           <AnimatePresence>
             {visibleEntries.map(({ key, value }) => renderField(key, value))}
@@ -462,7 +462,7 @@ export function JsonLevelColumn({
             className="mx-1 my-1 px-3 py-2.5 rounded-2xl text-sm font-medium text-slate-500 bg-slate-50 hover:bg-slate-100 transition-colors"
             onClick={() => setShowAllEntries(true)}
           >
-            전체 {entries.length.toLocaleString()}개 중 {ENTRY_RENDER_CAP.toLocaleString()}개 표시 · 더 보기
+            Showing {ENTRY_RENDER_CAP.toLocaleString()} of {entries.length.toLocaleString()} · Show more
           </button>
         )}
 
@@ -505,7 +505,7 @@ export function JsonLevelColumn({
             />
           ) : (
             <AddItemButton
-              label={isArrayNode ? '항목 추가' : '필드 추가'}
+              label={isArrayNode ? 'Add Item' : 'Add Field'}
               onClick={() => onSetEditingId(addFieldEditingId)}
               buttonClassName="group flex items-center gap-3 px-4 py-3.5 rounded-2xl cursor-pointer hover:bg-slate-50/80 active:bg-slate-100/50 transition-colors"
               iconClassName="shrink-0 w-9 h-9 rounded-xl flex items-center justify-center border border-dashed border-slate-300 text-slate-400 group-hover:border-emerald-300 group-hover:text-emerald-500 transition-colors"

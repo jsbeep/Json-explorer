@@ -133,7 +133,7 @@ export default function ExplorerPage() {
                   className={styles.undoBtn}
                   onClick={() => { void undo(); dismissToast(); }}
                 >
-                  실행 취소
+                  Undo
                 </button>
               )}
               <button

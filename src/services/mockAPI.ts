@@ -199,7 +199,7 @@ export const mutateData = async (op: MockMutationRequest): Promise<MockMutationR
 
       snapshot.databases[newDbName] = {
         name: newDbName,
-        label: `${source.label} 복사본`,
+        label: `${source.label} Copy`,
         description: source.description,
         collections,
         updatedAt: now,
@@ -325,7 +325,7 @@ export const mutateData = async (op: MockMutationRequest): Promise<MockMutationR
       database.collections[newCollectionName] = {
         ...source,
         name: newCollectionName,
-        label: `${source.label} 복사본`,
+        label: `${source.label} Copy`,
         documents: source.documents.map((document) => ({
           ...cloneDocument(document),
           _id: { $oid: generateObjectId() },

@@ -5,23 +5,23 @@ import { GitBranch, MousePointerClick, PencilLine, FlaskConical } from 'lucide-r
 const FEATURES = [
   {
     icon: GitBranch,
-    title: 'Miller Column 드릴다운',
-    description: '컬럼 단위로 깊이 들어가며 JSON 구조를 직관적으로 탐색합니다.',
+    title: 'Miller Column Drill-down',
+    description: 'Dive deeper column by column to intuitively explore JSON structures.',
   },
   {
     icon: MousePointerClick,
-    title: '참조 관계 추적',
-    description: 'ObjectId·참조 필드를 자동 인식해 클릭 한 번으로 연결된 문서로 이동합니다.',
+    title: 'Reference Tracking',
+    description: 'Automatically detects ObjectId and reference fields, jumping to linked documents with a single click.',
   },
   {
     icon: PencilLine,
-    title: '인라인 편집',
-    description: '더블클릭으로 값을 즉시 수정하고, 실행 취소(Undo)까지 지원합니다.',
+    title: 'Inline Editing',
+    description: 'Double-click to edit values instantly, with full Undo support.',
   },
   {
     icon: FlaskConical,
-    title: '더미 데이터 프로토타이핑',
-    description: '실제 API 연동 전, 공유 타입 기반 더미 데이터로 UI를 먼저 검증한 프로젝트입니다.',
+    title: 'Mock Data Prototyping',
+    description: 'A project that validates UI with shared-type mock data before wiring up the real API.',
   },
 ] as const;
 
@@ -69,8 +69,8 @@ export function LandingIntro() {
           transition={{ duration: 0.5, delay: 0.1 }}
           className="mt-4 max-w-2xl text-base leading-relaxed text-slate-500"
         >
-          MongoDB·Firestore 데이터를 다루는 개발자를 위한 무료 JSON 탐색기입니다. 참조 관계 추적, 인라인 편집,
-          더미 데이터 기반 프로토타이핑까지 한 화면에서 끝냅니다.
+          A free JSON explorer for developers working with MongoDB and Firestore data. Reference tracking, inline editing,
+          and mock-data-based prototyping — all in one screen.
         </motion.p>
       </div>
 

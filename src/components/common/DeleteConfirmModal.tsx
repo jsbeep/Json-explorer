@@ -5,10 +5,10 @@ import { AlertTriangle, Loader2 } from 'lucide-react';
 // ── 타겟 타입별 경고 문구 ─────────────────────────────────────────────────────
 
 const TARGET_MESSAGES: Record<string, string> = {
-  database: '이 데이터베이스와 하위 모든 컬렉션·문서가 삭제됩니다.',
-  collection: '이 컬렉션과 하위 모든 문서가 삭제됩니다.',
-  document: '이 문서가 영구적으로 삭제됩니다.',
-  field: '이 필드와 하위 데이터가 모두 삭제됩니다.',
+  database: 'This database and all its collections and documents will be deleted.',
+  collection: 'This collection and all its documents will be deleted.',
+  document: 'This document will be permanently deleted.',
+  field: 'This field and all its nested data will be deleted.',
 };
 
 // ── 스타일 ────────────────────────────────────────────────────────────────────
@@ -84,15 +84,15 @@ export function DeleteConfirmModal({
             </div>
 
             <div>
-              <p className={styles.title}>삭제하시겠습니까?</p>
+              <p className={styles.title}>Are you sure you want to delete this?</p>
               <code className={styles.targetName}>{targetLabel}</code>
             </div>
 
-            <p className={styles.message}>{message} 이 작업은 되돌릴 수 없습니다.</p>
+            <p className={styles.message}>{message} This action cannot be undone.</p>
 
             <div className={styles.actions}>
               <button type="button" className={styles.cancelBtn} onClick={onCancel} disabled={isPending}>
-                취소
+                Cancel
               </button>
               <button
                 type="button"
@@ -101,7 +101,7 @@ export function DeleteConfirmModal({
                 disabled={isPending}
               >
                 {isPending && <Loader2 size={14} className="animate-spin" />}
-                삭제
+                Delete
               </button>
             </div>
           </motion.div>

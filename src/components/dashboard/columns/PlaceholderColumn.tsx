@@ -5,9 +5,9 @@ interface PlaceholderColumnProps {
 }
 
 const SLOT_HINTS = [
-  { icon: Database, text: '데이터베이스를 선택하세요' },
-  { icon: Layers, text: '컬렉션을 선택하세요' },
-  { icon: Braces, text: '문서를 선택하면 필드가 표시됩니다' },
+  { icon: Database, text: 'Select a database' },
+  { icon: Layers, text: 'Select a collection' },
+  { icon: Braces, text: 'Select a document to view its fields' },
 ] as const;
 
 export function PlaceholderColumn({ slotIndex }: PlaceholderColumnProps) {

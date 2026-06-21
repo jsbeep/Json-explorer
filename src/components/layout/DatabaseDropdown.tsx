@@ -82,7 +82,7 @@ function DatabaseRow({ database, isActive, isRenaming, onSelect, onStartRename, 
         <p className={cn(styles.rowLabel, isActive ? 'text-emerald-700 font-semibold' : 'text-slate-700')}>
           {database.label}
         </p>
-        <p className={styles.rowMeta}>{database.collectionCount}개 컬렉션 · {database.documentCount}개 문서</p>
+        <p className={styles.rowMeta}>{database.collectionCount} collections · {database.documentCount} docs</p>
       </div>
 
       <div className={styles.rowActions} onClick={(e) => e.stopPropagation()}>
@@ -95,10 +95,10 @@ function DatabaseRow({ database, isActive, isRenaming, onSelect, onStartRename, 
               exit={{ width: 0, opacity: 0 }}
               transition={SPRING_HOVER}
             >
-              <button type="button" className={styles.actionBtn} onClick={onDuplicate} aria-label={`${database.label} 복제`}>
+              <button type="button" className={styles.actionBtn} onClick={onDuplicate} aria-label={`Duplicate ${database.label}`}>
                 <CopyPlus size={16} />
               </button>
-              <button type="button" className={styles.actionBtn} onClick={onStartRename} aria-label={`${database.label} 이름 변경`}>
+              <button type="button" className={styles.actionBtn} onClick={onStartRename} aria-label={`Rename ${database.label}`}>
                 <Pencil size={16} />
               </button>
             </m.div>
@@ -248,7 +248,7 @@ export function DatabaseDropdown({ activeDatabase, databases, selectDatabase, on
                           if (e.key === 'Escape') setRenamingName(null);
                         }}
                       />
-                      <button type="button" className={styles.editDelete} onClick={() => setDeleteTarget(database)} aria-label={`${database.label} 삭제`}>
+                      <button type="button" className={styles.editDelete} onClick={() => setDeleteTarget(database)} aria-label={`Delete ${database.label}`}>
                         <Trash2 size={16} />
                       </button>
                       <button type="button" className={styles.editConfirm} onClick={() => void handleConfirmRename()} disabled={!renameValue.trim() || isPending}>
@@ -271,7 +271,7 @@ export function DatabaseDropdown({ activeDatabase, databases, selectDatabase, on
                   ),
                 )
               ) : (
-                <p className={styles.empty}>데이터베이스가 없습니다.</p>
+                <p className={styles.empty}>No databases.</p>
               )}
 
               <div className={styles.divider} />
@@ -300,7 +300,7 @@ export function DatabaseDropdown({ activeDatabase, databases, selectDatabase, on
               ) : (
                 <button type="button" className={styles.addRow} onClick={() => { setIsAdding(true); setRenamingName(null); }}>
                   <Plus size={15} />
-                  새 데이터베이스
+                  New Database
                 </button>
               )}
               </m.div>

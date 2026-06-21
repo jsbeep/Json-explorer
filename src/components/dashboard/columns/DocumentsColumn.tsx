@@ -87,7 +87,7 @@ export function DocumentsColumn({
 
   return (
     <div className={styles.container} {...dragHandlers}>
-      <DropOverlay visible={isColumnDragOver} label="파일을 놓아 문서로 가져오기" />
+      <DropOverlay visible={isColumnDragOver} label="Drop a file to import as a document" />
 
       {/* 헤더 */}
       <div className={styles.header}>
@@ -97,7 +97,7 @@ export function DocumentsColumn({
               autoFocus
               type="text"
               className="flex-1 min-w-0 text-xs px-2 py-1 rounded-lg bg-slate-100/80 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-400/60 focus:bg-white transition-all"
-              placeholder="제목으로 쓸 필드 키 (예: name)"
+              placeholder="Field key to use as title (e.g. name)"
               value={titleKeyInput}
               onChange={(e) => setTitleKeyInput(e.target.value)}
               onKeyDown={(e) => {
@@ -130,7 +130,7 @@ export function DocumentsColumn({
                 'flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200/70 text-slate-500 hover:text-slate-700 transition-colors shrink-0',
                 !activeCollectionName && 'opacity-40 pointer-events-none',
               )}
-              title="제목으로 표시할 필드 선택"
+              title="Select field to display as title"
               onClick={() => {
                 setTitleKeyInput(currentTitleKey ?? 'name');
                 setIsEditingTitleKey(true);
@@ -245,7 +245,7 @@ export function DocumentsColumn({
           />
         ) : (
           <AddItemButton
-            label="문서 추가"
+            label="Add Document"
             onClick={() => onSetEditingId('document:__new__')}
             buttonClassName={styles.addCard}
             iconClassName={styles.addCardIcon}
@@ -256,7 +256,7 @@ export function DocumentsColumn({
         {!documents.length && (
           <div className={styles.empty}>
             <FileText size={28} className="opacity-30" />
-            <span>문서 없음</span>
+            <span>No documents</span>
           </div>
         )}
       </div>

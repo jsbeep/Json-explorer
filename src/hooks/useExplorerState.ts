@@ -176,7 +176,7 @@ export function useExplorerState(): UseExplorerStateResult {
       setEditingId(null);
     } catch {
       setConnectionStatus('error');
-      showToast('DB 연결에 실패했습니다.', 'error');
+      showToast('Failed to connect to DB.', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -205,7 +205,7 @@ export function useExplorerState(): UseExplorerStateResult {
       ]);
       setEditingId(null);
     } catch {
-      showToast('데이터베이스를 불러올 수 없습니다.', 'error');
+      showToast('Could not load database.', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -243,7 +243,7 @@ export function useExplorerState(): UseExplorerStateResult {
       });
       setEditingId(null);
     } catch {
-      showToast('컬렉션을 불러올 수 없습니다.', 'error');
+      showToast('Could not load collection.', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -273,7 +273,7 @@ export function useExplorerState(): UseExplorerStateResult {
       });
       setEditingId(null);
     } catch {
-      showToast('문서를 불러올 수 없습니다.', 'error');
+      showToast('Could not load document.', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -321,7 +321,7 @@ export function useExplorerState(): UseExplorerStateResult {
       });
       setEditingId(null);
     } catch {
-      showToast('레퍼런스를 불러올 수 없습니다.', 'error');
+      showToast('Could not load reference.', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -333,7 +333,7 @@ export function useExplorerState(): UseExplorerStateResult {
     try {
       const info = await getReferenceInfo(oid);
       if (!info) {
-        showToast('참조된 문서를 찾을 수 없습니다.', 'error');
+        showToast('Could not find the referenced document.', 'error');
         return;
       }
       const { databaseName, collectionName, collectionLabel, documentTitle } = info;
@@ -377,7 +377,7 @@ export function useExplorerState(): UseExplorerStateResult {
       ]);
       setEditingId(null);
     } catch {
-      showToast('이동에 실패했습니다.', 'error');
+      showToast('Failed to navigate.', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -507,10 +507,10 @@ export function useExplorerState(): UseExplorerStateResult {
         setEditingId(null);
       }
 
-      showToast('저장 완료', 'success', true);
+      showToast('Saved', 'success', true);
       return result;
     } catch (e) {
-      const msg = typeof e === 'string' ? e : '저장에 실패했습니다.';
+      const msg = typeof e === 'string' ? e : 'Failed to save.';
       showToast(msg, 'error');
       throw e;
     } finally {
@@ -528,7 +528,7 @@ export function useExplorerState(): UseExplorerStateResult {
     if (!snapshot) return;
     await mutate({ type: 'replaceSnapshot', snapshot });
     undoSnapshotRef.current = null;
-    showToast('실행 취소됨', 'success');
+    showToast('Undone', 'success');
   }, [mutate, showToast]);
 
   const refresh = useCallback(async () => {
@@ -546,7 +546,7 @@ export function useExplorerState(): UseExplorerStateResult {
         }
       }
     } catch {
-      showToast('새로고침에 실패했습니다.', 'error');
+      showToast('Failed to refresh.', 'error');
     } finally {
       setIsLoading(false);
     }
