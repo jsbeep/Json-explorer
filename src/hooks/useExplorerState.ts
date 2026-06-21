@@ -35,7 +35,7 @@ export type { ToastMessage };
 
 const CHAIN_COLORS = ['#f59e0b', '#8b5cf6', '#3b82f6', '#ec4899', '#14b8a6'] as const;
 
-export const MIN_VISIBLE_COLUMNS = 3;
+export const MIN_VISIBLE_COLUMNS = 2;
 export const MAX_VISIBLE_COLUMNS = 6;
 
 let pathIdCounter = 0;
@@ -97,7 +97,7 @@ export function useExplorerState(): UseExplorerStateResult {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [changedPaths, setChangedPaths] = useState<string[]>([]);
-  const [maxVisibleColumns, setMaxVisibleColumnsState] = useState(MIN_VISIBLE_COLUMNS);
+  const [maxVisibleColumns, setMaxVisibleColumnsState] = useState(MIN_VISIBLE_COLUMNS + 1);
 
   const setMaxVisibleColumns = useCallback((count: number) => {
     const clamped = Math.min(MAX_VISIBLE_COLUMNS, Math.max(MIN_VISIBLE_COLUMNS, count));

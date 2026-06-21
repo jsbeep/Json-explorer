@@ -1,6 +1,10 @@
 // path: src/components/layout/LandingIntro.tsx
 import { motion } from 'framer-motion';
-import { GitBranch, MousePointerClick, PencilLine, FlaskConical } from 'lucide-react';
+import { GitBranch, MousePointerClick, PencilLine, FlaskConical, X } from 'lucide-react';
+
+interface LandingIntroProps {
+  onClose: () => void;
+}
 
 const FEATURES = [
   {
@@ -32,9 +36,19 @@ const fadeUp = {
   visible: { opacity: 1, y: 0 },
 };
 
-export function LandingIntro() {
+export function LandingIntro({ onClose }: LandingIntroProps) {
   return (
     <section className="relative flex-1 flex-col w-full px-6 py-24 sm:px-10 lg:px-20">
+      <button
+        type="button"
+        className="absolute top-4 left-1/2 -translate-x-1/2 flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-600"
+        onClick={onClose}
+        aria-label="Dismiss intro section"
+        title="Dismiss intro section"
+      >
+        <X size={16} />
+      </button>
+
       <div className="mx-auto flex max-w-5xl flex-col items-center text-center">
         <motion.span
           initial="hidden"

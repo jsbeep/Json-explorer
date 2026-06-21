@@ -1,6 +1,6 @@
 // path: src/components/layout/Header.tsx
 import { useState } from 'react';
-import { Circle, Minus, Plus, RefreshCw } from 'lucide-react';
+import { Circle, Columns3, ListTree, Minus, Plus, RefreshCw } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { MIN_VISIBLE_COLUMNS, MAX_VISIBLE_COLUMNS, type UseExplorerStateResult } from '../../hooks/useExplorerState';
 import { cn } from '../../utils/cn';
@@ -40,10 +40,12 @@ const styles = {
     'absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full border border-white bg-white shadow-[0_0_0_1px_rgba(255,255,255,1)]',
   refreshBadgeDot: 'h-2.5 w-2.5',
   stepperWrap:
-    'flex shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-white px-1 py-1',
+    'flex shrink-0 items-center rounded-full border border-slate-200 bg-white px-1 py-1',
   stepperButton:
-    'inline-flex h-7 w-7 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent',
-  stepperValue: 'w-4 text-center text-sm font-semibold tabular-nums text-slate-700',
+    'inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent',
+  stepperReset: 'inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-600 text-sm font-semibold transition-colors hover:bg-slate-100 hover:text-slate-700',
+  modeToggle:
+    'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-800',
 } as const;
 
 const STATUS_STYLES: Record<UseExplorerStateResult['connectionStatus'], { color: string; label: string }> = {
@@ -77,6 +79,8 @@ export function Header({
 }: HeaderProps) {
   const status = STATUS_STYLES[connectionStatus];
   const [rotation, setRotation] = useState(0);
+  // 생색용 토글 — 트리모드(컬럼 2개)/컬럼모드(컬럼 3개) 둘만 오가며, 다른 상태는 추가하지 않음
+  const isTreeMode = maxVisibleColumns === MIN_VISIBLE_COLUMNS;
 
   const handleRefresh = () => {
     setRotation((current) => current + 360);
@@ -104,20 +108,37 @@ export function Header({
         </div>
 
         <div className={styles.right}>
+          <button
+            type="button"
+            className={styles.modeToggle}
+            onClick={() => setMaxVisibleColumns(isTreeMode ? 3 : MIN_VISIBLE_COLUMNS)}
+            aria-label={isTreeMode ? 'Switch to column mode' : 'Switch to tree mode'}
+            title={isTreeMode ? 'Tree mode — click for column mode' : 'Column mode — click for tree mode'}
+          >
+            {isTreeMode ? <ListTree size={14} /> : <Columns3 size={14} />}
+            <span>{isTreeMode ? 'Tree' : 'Columns'}</span>
+          </button>
           <div className={styles.stepperWrap} role="group" aria-label="Visible column count">
             <button
               type="button"
-              className={styles.stepperButton}
+              className={cn(styles.stepperButton, "rounded-l-2xl")}
               onClick={() => setMaxVisibleColumns(maxVisibleColumns - 1)}
               disabled={maxVisibleColumns <= MIN_VISIBLE_COLUMNS}
               aria-label="Show fewer columns"
             >
               <Minus size={14} />
             </button>
-            <span className={styles.stepperValue}>{maxVisibleColumns}</span>
             <button
               type="button"
-              className={styles.stepperButton}
+              className={styles.stepperReset}
+              onClick={() => setMaxVisibleColumns(3)}
+              aria-label="reset to 3 columns"
+            >
+              {maxVisibleColumns}
+            </button>
+            <button
+              type="button"
+              className={cn(styles.stepperButton, "rounded-r-2xl")}
               onClick={() => setMaxVisibleColumns(maxVisibleColumns + 1)}
               disabled={maxVisibleColumns >= MAX_VISIBLE_COLUMNS}
               aria-label="Show more columns"

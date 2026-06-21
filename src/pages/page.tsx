@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Database } from 'lucide-react';
 import { useExplorerState } from '../hooks/useExplorerState';
 import { Header } from '../components/layout/Header';
 import { LandingIntro } from '../components/layout/LandingIntro';
@@ -25,6 +24,7 @@ const styles = {
 
 export default function ExplorerPage() {
   const state = useExplorerState();
+  const [showIntro, setShowIntro] = useState(true);
 
   // 초기 연결
   useEffect(() => {
@@ -89,6 +89,7 @@ export default function ExplorerPage() {
           />
           <MillerColumns
             visibleColumns={visibleColumns}
+            maxVisibleColumns={maxVisibleColumns}
             collections={collections}
             documents={documents}
             openDocument={openDocument}
@@ -112,11 +113,13 @@ export default function ExplorerPage() {
         </div>
       </div>
 
-      {/* 스크롤 시 노출되는 소개 섹션 */}
-      <div className="flex flex-col h-screen w-full">
-        <LandingIntro />
-        <Footer />
-      </div>
+      {/* 스크롤 시 노출되는 소개 섹션 — X로 닫으면 Footer까지 함께 사라지고 explorer 패널만 남는다 */}
+      {showIntro && (
+        <div className="flex flex-col h-screen w-full">
+          <LandingIntro onClose={() => setShowIntro(false)} />
+          <Footer />
+        </div>
+      )}
 
       {/* 토스트 알림 */}
       <div className={styles.toastPositioner} aria-live="assertive">

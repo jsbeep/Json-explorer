@@ -390,19 +390,19 @@ export const createSeedSnapshot = (): MockSnapshot => {
         label: 'Mongolive Dev',
         description: 'Seed database used by the local explorer mock API',
         collections: {
-          users: {
-            name: 'users',
-            label: 'Users',
-            description: 'Registered demo users for the explorer',
-            documents: users,
-            updatedAt: now - 3_600_000,
-          },
           orders: {
             name: 'orders',
             label: 'Orders',
             description: 'Purchase records linked to users by DBRef',
             documents: orders,
             updatedAt: now - 2_400_000,
+          },
+          users: {
+            name: 'users',
+            label: 'Users',
+            description: 'Registered demo users for the explorer',
+            documents: users,
+            updatedAt: now - 3_600_000,
           },
           products: {
             name: 'products',

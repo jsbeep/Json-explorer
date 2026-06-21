@@ -1,18 +1,22 @@
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import type { UseExplorerStateResult } from '../../hooks/useExplorerState';
+import { MIN_VISIBLE_COLUMNS, type UseExplorerStateResult } from '../../hooks/useExplorerState';
 import { CollectionsColumn } from './columns/CollectionsColumn';
 import { DocumentsColumn } from './columns/DocumentsColumn';
+import { CollectionsDocumentsColumn } from './columns/CollectionsDocumentsColumn';
 import { JsonLevelColumn } from './columns/JsonLevelColumn';
 import { PlaceholderColumn } from './columns/PlaceholderColumn';
-import type { ActivePath } from '../../types/explorer';
+import type { ActivePath, Document, MockMutationRequest } from '../../types/explorer';
 import { ANIMATION_DISABLE_THRESHOLD_MB } from '../../utils/motionPresets';
 
 // ── 상수 ──────────────────────────────────────────────────────────────────────
 
 // 마지막 컬럼만 살짝 더 넓게, 나머지는 동일 비율 (컬럼 수가 가변이라 슬롯 개수에 맞춰 생성)
+// 단, 컬럼이 2개일 땐(인라인 재귀 중첩 모드) 마지막 패널을 훨씬 더 넓게(3:7)
 const getFlexRatios = (count: number): number[] =>
-  Array.from({ length: count }, (_, i) => (i === count - 1 ? 4 : 3));
+  count === 2
+    ? [3, 7]
+    : Array.from({ length: count }, (_, i) => (i === count - 1 ? 4 : 3));
 
 // ── 애니메이션 variants ────────────────────────────────────────────────────────
 
@@ -42,6 +46,7 @@ const placeholderVariants = {
 type MillerColumnsProps = Pick<
   UseExplorerStateResult,
   | 'visibleColumns'
+  | 'maxVisibleColumns'
   | 'collections'
   | 'documents'
   | 'openDocument'
@@ -67,6 +72,7 @@ type MillerColumnsProps = Pick<
 
 export function MillerColumns({
   visibleColumns,
+  maxVisibleColumns,
   collections,
   documents,
   openDocument,
@@ -118,19 +124,77 @@ export function MillerColumns({
     return sizeMb > ANIMATION_DISABLE_THRESHOLD_MB;
   }, [collections, activeCollectionName]);
 
-  const flexRatios = useMemo(() => getFlexRatios(visibleColumns.length), [visibleColumns.length]);
+  // activePaths는 항상 [collections?, documents?, json, json, json...] 순서의 스택이다 —
+  // 끝에서부터 연속으로 columnKind==='json'인 구간이 "현재 문서 안에서 얼마나 깊이
+  // 들어갔는지"를 나타내는 체인이다.
+  const jsonChainStartIndex = useMemo(() => {
+    let i = activePaths.length;
+    while (i > 0 && activePaths[i - 1].columnKind === 'json') i--;
+    return i;
+  }, [activePaths]);
+
+  const jsonChainPaths = useMemo(() => activePaths.slice(jsonChainStartIndex), [activePaths, jsonChainStartIndex]);
+  const prefixPaths = useMemo(() => activePaths.slice(0, jsonChainStartIndex), [activePaths, jsonChainStartIndex]);
+
+  // 컬럼 수가 최소(MIN_VISIBLE_COLUMNS)일 때 — Collections/Documents를 한 패널에서
+  // navigate하고, json 체인은(있으면) 가로 슬라이딩 대신 재귀적으로 한 패널 안에
+  // 중첩해서 보여준다
+  const twoColMode = maxVisibleColumns === MIN_VISIBLE_COLUMNS;
+  const inlineMode = twoColMode && jsonChainPaths.length > 0;
+
+  const renderSlots = useMemo<RenderSlot[]>(() => {
+    if (!twoColMode) {
+      return visibleColumns.map((col, i) => ({
+        key: col ? `col-${col.comp.id}` : `ph-${i}`,
+        col,
+        slotIndex: i,
+      }));
+    }
+
+    const slots: RenderSlot[] = [];
+    const collectionsPath = prefixPaths.find((p) => p.columnKind === 'collections') ?? null;
+    const documentsPath = prefixPaths.find((p) => p.columnKind === 'documents') ?? null;
+    if (collectionsPath) {
+      slots.push({
+        key: 'colsdocs', // collections↔documents 토글은 패널 내부에서 처리 — 키를 고정해 슬라이드 애니메이션이 안 일어나게 함
+        col: collectionsPath,
+        slotIndex: 0,
+        isCollectionsDocuments: true,
+        collectionsPath,
+        documentsPath,
+      });
+    }
+
+    if (jsonChainPaths.length > 0) {
+      const [head, ...tail] = jsonChainPaths;
+      slots.push({
+        key: `col-${head.comp.id}`,
+        col: head,
+        slotIndex: jsonChainStartIndex, // activePaths 안의 실제 인덱스 — myIndex 공식에 그대로 들어감
+        jsonChainTail: tail,
+      });
+    } else {
+      slots.push({ key: 'ph-doc', col: null, slotIndex: 1, placeholderHint: 2 });
+    }
+    return slots;
+  }, [twoColMode, visibleColumns, prefixPaths, jsonChainPaths, jsonChainStartIndex]);
+
+  const flexRatios = useMemo(() => getFlexRatios(renderSlots.length), [renderSlots.length]);
+  // 인라인 모드에선 visibleLength를 activePaths.length로 줘야 JsonLevelColumn의
+  // myIndex = (activePaths.length - visibleLength) + slotIndex 공식이 slotIndex를
+  // 실제 배열 인덱스 그대로 돌려준다 (윈도잉이 없으므로)
+  const jsonVisibleLength = inlineMode ? activePaths.length : visibleColumns.length;
 
   return (
     <div className="relative flex h-full w-full gap-3 overflow-hidden rounded-2xl p-3">
       <AnimatePresence initial={false} mode="popLayout" custom={direction}>
-        {visibleColumns.map((col, slotIndex) => {
-          const flex = flexRatios[slotIndex];
-          const isPlaceholder = col === null;
-          const key = isPlaceholder ? `ph-${slotIndex}` : `col-${col.comp.id}`;
+        {renderSlots.map((slot, visualIndex) => {
+          const flex = flexRatios[visualIndex];
+          const isPlaceholder = slot.col === null;
 
           return (
             <motion.div
-              key={key}
+              key={slot.key}
               custom={direction}
               variants={isPlaceholder ? placeholderVariants : colVariants}
               initial="enter"
@@ -138,7 +202,7 @@ export function MillerColumns({
               exit="exit"
               transition={reduceMotion ? { duration: 0 } : spring}
               layout={!reduceMotion}
-              style={{ flex, zIndex: 99 - slotIndex }} // 뒤에 나올수록 zIndex 낮게
+              style={{ flex, zIndex: 99 - visualIndex }} // 뒤에 나올수록 zIndex 낮게
               className={[
                 'min-w-0 h-full flex flex-col rounded-2xl overflow-hidden',
                 isPlaceholder
@@ -147,12 +211,32 @@ export function MillerColumns({
               ].join(' ')}
             >
               {isPlaceholder ? (
-                <PlaceholderColumn slotIndex={slotIndex} />
+                <PlaceholderColumn slotIndex={slot.placeholderHint ?? visualIndex} />
+              ) : slot.isCollectionsDocuments ? (
+                <CollectionsDocumentsColumn
+                  collectionsPath={slot.collectionsPath!}
+                  documentsPath={slot.documentsPath ?? null}
+                  collections={collections}
+                  documents={documents}
+                  activeCollectionName={activeCollectionName}
+                  activeDocumentOid={activeDocumentOid}
+                  activeDatabaseName={activeDatabaseName}
+                  isLoading={isLoading}
+                  changedPaths={changedPaths}
+                  editingId={editingId}
+                  reduceMotion={reduceMotion}
+                  onSelectCollection={selectCollection}
+                  onSelectDocument={selectDocument}
+                  onMutate={mutate}
+                  onSetEditingId={setEditingId}
+                  onBackToCollections={() => popToIndex(0)}
+                />
               ) : (
                 <ColumnContent
-                  col={col}
-                  visibleLength={visibleColumns.length}
-                  slotIndex={slotIndex}
+                  col={slot.col!}
+                  visibleLength={slot.col!.columnKind === 'json' ? jsonVisibleLength : visibleColumns.length}
+                  slotIndex={slot.slotIndex}
+                  jsonChainTail={slot.jsonChainTail}
                   reduceMotion={reduceMotion}
                   collections={collections}
                   documents={documents}
@@ -186,19 +270,36 @@ export function MillerColumns({
   );
 }
 
+// ── 슬롯 타입 ─────────────────────────────────────────────────────────────────
+
+interface RenderSlot {
+  key: string;
+  col: ActivePath | null;
+  slotIndex: number;
+  // 있으면 이 슬롯(json 컬럼)이 재귀 중첩 체인의 head — 나머지를 nestedChild로 이어붙인다
+  jsonChainTail?: ActivePath[];
+  // true면 Collections/Documents를 한 패널에서 navigate(컬럼 2개 모드)
+  isCollectionsDocuments?: boolean;
+  collectionsPath?: ActivePath;
+  documentsPath?: ActivePath | null;
+  // placeholder일 때 보여줄 힌트 — 없으면 시각적 위치(visualIndex)를 그대로 사용
+  placeholderHint?: number;
+}
+
 // ── 컬럼 내용 분기 ────────────────────────────────────────────────────────────
 
-interface ColumnContentProps extends Omit<MillerColumnsProps, 'visibleColumns'> {
+interface ColumnContentProps extends Omit<MillerColumnsProps, 'visibleColumns' | 'maxVisibleColumns'> {
   col: ActivePath;
   visibleLength: number;
   slotIndex: number;
+  jsonChainTail?: ActivePath[];
   activeCollectionName: string | null;
   activeDocumentOid: string | null;
   activeDatabaseName: string | null;
   reduceMotion: boolean;
 }
 
-function ColumnContent({ col, visibleLength, slotIndex, ...rest }: ColumnContentProps) {
+function ColumnContent({ col, visibleLength, slotIndex, jsonChainTail, ...rest }: ColumnContentProps) {
   if (col.columnKind === 'collections') {
     return (
       <CollectionsColumn
@@ -236,6 +337,27 @@ function ColumnContent({ col, visibleLength, slotIndex, ...rest }: ColumnContent
     );
   }
 
+  const isChainHead = jsonChainTail !== undefined;
+  const chainShared: JsonChainSharedProps = {
+    openDocument: rest.openDocument,
+    isLoading: rest.isLoading,
+    changedPaths: rest.changedPaths,
+    editingId: rest.editingId,
+    activePaths: rest.activePaths,
+    activeCollectionName: rest.activeCollectionName,
+    activeDatabaseName: rest.activeDatabaseName,
+    reduceMotion: rest.reduceMotion,
+    onPushJsonPath: rest.pushJsonPath,
+    onPushReference: rest.pushReference,
+    onNavigateToReference: rest.navigateToReference,
+    onPopToIndex: rest.popToIndex,
+    onMutate: rest.mutate,
+    uniqueOids: rest.uniqueOids,
+    onRegisterUniqueOid: rest.registerUniqueOid,
+    onUnregisterUniqueOid: rest.unregisterUniqueOid,
+    onSetEditingId: rest.setEditingId,
+  };
+
   return (
     <JsonLevelColumn
       path={col}
@@ -258,6 +380,71 @@ function ColumnContent({ col, visibleLength, slotIndex, ...rest }: ColumnContent
       onRegisterUniqueOid={rest.registerUniqueOid}
       onUnregisterUniqueOid={rest.unregisterUniqueOid}
       onSetEditingId={rest.setEditingId}
+      isInlineChain={isChainHead}
+      nestedChild={isChainHead ? buildJsonChain(jsonChainTail!, slotIndex + 1, visibleLength, chainShared, true) : null}
+    />
+  );
+}
+
+// ── 재귀 중첩 체인 빌더 ────────────────────────────────────────────────────────
+// 인라인 모드에서 json 체인의 head 다음 단계들을 뒤따라가며, 각 단계가 자기
+// 다음 단계를 nestedChild로 품은 JsonLevelColumn을 만든다. ColumnContent의 json
+// 분기와 똑같은 props를 그대로 재사용 — 탐색/pop 로직은 전혀 건드리지 않는다.
+
+interface JsonChainSharedProps {
+  openDocument: Document | null;
+  isLoading: boolean;
+  changedPaths: string[];
+  editingId: string | null;
+  activePaths: ActivePath[];
+  activeCollectionName: string | null;
+  activeDatabaseName: string | null;
+  reduceMotion: boolean;
+  onPushJsonPath: (path: ActivePath) => void;
+  onPushReference: (oid: string, fieldKey: string, popIndex?: number) => Promise<void>;
+  onNavigateToReference: (oid: string) => Promise<void>;
+  onPopToIndex: (index: number) => void;
+  onMutate: (op: MockMutationRequest) => Promise<unknown>;
+  uniqueOids: Set<string>;
+  onRegisterUniqueOid: (oid: string) => void;
+  onUnregisterUniqueOid: (oid: string) => void;
+  onSetEditingId: (id: string | null) => void;
+}
+
+function buildJsonChain(
+  paths: ActivePath[],
+  startTrueIndex: number,
+  visibleLength: number,
+  shared: JsonChainSharedProps,
+  isNested: boolean,
+): ReactNode | null {
+  if (!paths.length) return null;
+  const [head, ...tail] = paths;
+  return (
+    <JsonLevelColumn
+      path={head}
+      visibleLength={visibleLength}
+      slotIndex={startTrueIndex}
+      isNested={isNested}
+      isInlineChain
+      nestedChild={buildJsonChain(tail, startTrueIndex + 1, visibleLength, shared, true)}
+      openDocument={shared.openDocument}
+      isLoading={shared.isLoading}
+      changedPaths={shared.changedPaths}
+      editingId={shared.editingId}
+      activePaths={shared.activePaths}
+      activeCollectionName={shared.activeCollectionName}
+      activeDatabaseName={shared.activeDatabaseName}
+      reduceMotion={shared.reduceMotion}
+      onPushJsonPath={shared.onPushJsonPath}
+      onPushReference={shared.onPushReference}
+      onNavigateToReference={shared.onNavigateToReference}
+      onPopToIndex={shared.onPopToIndex}
+      onMutate={shared.onMutate}
+      uniqueOids={shared.uniqueOids}
+      onRegisterUniqueOid={shared.onRegisterUniqueOid}
+      onUnregisterUniqueOid={shared.onUnregisterUniqueOid}
+      onSetEditingId={shared.onSetEditingId}
     />
   );
 }

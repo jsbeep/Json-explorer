@@ -1,8 +1,10 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { nextPathId } from '../../../hooks/useExplorerState';
-import { Link, Hash, ToggleLeft, KeyRound } from 'lucide-react';
-import { AnimatePresence } from 'framer-motion';
+import { Link, Hash, ToggleLeft, KeyRound, ChevronRight } from 'lucide-react';
+import { AnimatePresence, m } from 'framer-motion';
+import { SPRING_SNAPPY } from '../../../utils/motionPresets';
+import { cn } from '../../../utils/cn';
 import {
   isBsonObjectId as isBsonOid,
   type ActivePath,
@@ -27,6 +29,9 @@ import { useFileDrop } from '../../../hooks/useFileDrop';
 // 필드/배열 요소가 이 개수를 넘으면 한 번에 다 그리지 않고 일부만 렌더링한다
 const ENTRY_RENDER_CAP = 100;
 
+// 재귀 중첩 모드 — 스크롤하다 헤더가 위로 지나간 단계들을 모아 보여주는 sticky breadcrumb 높이(px)
+const CHAIN_BREADCRUMB_HEIGHT = 36;
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface JsonLevelColumnProps {
@@ -50,6 +55,16 @@ interface JsonLevelColumnProps {
   onUnregisterUniqueOid: (oid: string) => void;
   onSetEditingId: (id: string | null) => void;
   reduceMotion?: boolean;
+  // 인라인 재귀 중첩 모드(컬럼 수 최소일 때) — 이 컬럼 다음 단계를 별도 패널이 아니라
+  // 현재 활성 필드 행 바로 아래에 중첩해서 그려야 할 때 그 엘리먼트를 받는다
+  nestedChild?: ReactNode | null;
+  // true면 이 컬럼 자체가 누군가의 nestedChild로 그려진 것 — flex-1/자체 스크롤 없이
+  // 자연 높이로 렌더되어 바깥 패널 하나의 스크롤에 합쳐진다
+  isNested?: boolean;
+  // true면 이 컬럼이 재귀 중첩 체인의 일부 — 슬라이딩 윈도우 개념이 없으므로
+  // "같은 경로 재클릭/비확장 클릭" 시 pop 대상을 윈도우 크기 기준이 아니라
+  // 이 컬럼까지로 단순하게 맞춘다
+  isInlineChain?: boolean;
 }
 
 // ── 컴포넌트 ──────────────────────────────────────────────────────────────────
@@ -75,6 +90,9 @@ export function JsonLevelColumn({
   onUnregisterUniqueOid,
   onSetEditingId,
   reduceMotion,
+  nestedChild = null,
+  isNested = false,
+  isInlineChain = false,
 }: JsonLevelColumnProps) {
   // 위험 영역(의도적으로 더 쪼개지 않음): 아래부터 renderField까지는 refOid/myIndex
   // 파생값, 두 개의 참조-문서 fetch effect, handlePushChild, deleteTarget/
@@ -150,9 +168,13 @@ export function JsonLevelColumn({
     // 같은 경로일때는 뭐 없음
     if (isSamePath) {
       console.log('같은 경로라서 아무것도 안 함', nextProj);
-      // 0번 열이면 pop만 1번
-      if (slotIndex === 0)
+      if (isInlineChain) {
+        // 재귀 중첩 모드엔 "보이는 윈도우 크기" 개념이 없으므로 이 컬럼까지만 남기고 접는다
+        onPopToIndex(myIndex);
+      } else if (slotIndex === 0) {
+        // 0번 열이면 pop만 1번
         onPopToIndex(myIndex + (visibleLength - 2));
+      }
       return;
     }
 
@@ -183,7 +205,7 @@ export function JsonLevelColumn({
       };
       onPushJsonPath(child);
     }
-  }, [activePaths, slotIndex, path, refOid, chainColor, chainIndex, projectionPath, onPopToIndex, onPushJsonPath]);
+  }, [activePaths, slotIndex, isInlineChain, path, refOid, chainColor, chainIndex, projectionPath, onPopToIndex, onPushJsonPath]);
 
   const [deleteTarget, setDeleteTarget] = useState<{ fieldKey: string; value: JsonValue } | null>(null);
 
@@ -229,6 +251,46 @@ export function JsonLevelColumn({
     getReferenceInfo(oid).then((info) => { if (!cancelled) setEditingRefInfo(info); });
     return () => { cancelled = true; };
   }, [editingId]);
+
+  // ── 재귀 중첩 모드 sticky breadcrumb ─────────────────────────────────────────
+  // 최상위(head, isNested=false) 컬럼만 스크롤 컨테이너를 갖고 있어서 여기서만
+  // 관찰한다 — 중첩된 각 단계는 자기 헤더 위치에 data-chain-sentinel만 심어두고,
+  // 그 헤더가 sticky breadcrumb 영역 위로 스크롤되어 지나가면(IntersectionObserver)
+  // 그 단계의 라벨을 breadcrumb에 추가한다.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [passedChain, setPassedChain] = useState<Record<number, string | null>>({});
+
+  useEffect(() => {
+    if (isNested || !isInlineChain) return;
+    const root = scrollRef.current;
+    if (!root) return;
+    const sentinels = Array.from(root.querySelectorAll<HTMLElement>('[data-chain-sentinel]'));
+    if (!sentinels.length) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        setPassedChain((prev) => {
+          const next = { ...prev };
+          for (const entry of entries) {
+            const depth = Number(entry.target.getAttribute('data-chain-depth'));
+            const label = entry.target.getAttribute('data-chain-label') ?? '';
+            const passed = entry.boundingClientRect.top < (entry.rootBounds?.top ?? 0);
+            next[depth] = passed ? label : null;
+          }
+          return next;
+        });
+      },
+      { root, threshold: 0, rootMargin: `-${CHAIN_BREADCRUMB_HEIGHT}px 0px 0px 0px` },
+    );
+    sentinels.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+    // activePaths.length가 바뀔 때(체인이 늘거나 줄 때)만 sentinel을 다시 찾아 관찰하면 됨
+  }, [isNested, isInlineChain, activePaths.length]);
+
+  const chainBreadcrumb = Object.entries(passedChain)
+    .filter(([, label]) => label !== null)
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .map(([, label]) => label as string);
 
   // ── 필드 렌더러 ────────────────────────────────────────────────────────────
 
@@ -410,9 +472,45 @@ export function JsonLevelColumn({
         };
       }
       // 비확장 필드 클릭 시 하위 컬럼이 열려있으면 닫기
+      if (hasPathsAfter && isInlineChain) return () => onPopToIndex(myIndex);
       if (hasPathsAfter && slotIndex === 0) return () => onPopToIndex(activePaths.length - 2);
       return null;
     })();
+
+    // 재귀 중첩 모드에서 이 필드가 현재 펼쳐진 다음 단계라면, 별도 패널이 아니라
+    // 이 필드 행 바로 아래에 다음 단계 JsonLevelColumn(nestedChild)을 끼워 넣는다
+    if (isActive && nestedChild) {
+      return (
+        <div key={fieldKey} className="flex flex-col gap-1.5">
+          <FieldItem
+            fieldKey={fieldKey}
+            isId={isId}
+            isExpandable={isExpandable || isOidRef}
+            isEditable={isEditable}
+            isHighlighted={isHighlighted}
+            isActive={isActive}
+            reduceMotion={reduceMotion}
+            onEdit={() => onSetEditingId(editorId)}
+            onClick={handleClick}
+          >
+            {valueContent}
+          </FieldItem>
+          <AnimatePresence initial={false}>
+            <m.div
+              key="nested"
+              initial={{ opacity: 0, scaleY: 0.92 }}
+              animate={{ opacity: 1, scaleY: 1 }}
+              exit={{ opacity: 0, scaleY: 0.92 }}
+              style={{ transformOrigin: 'top' }}
+              transition={reduceMotion ? { duration: 0 } : SPRING_SNAPPY}
+              className="ml-4 flex flex-col rounded-2xl border border-slate-200/80 bg-white/70 shadow-sm overflow-hidden"
+            >
+              {nestedChild}
+            </m.div>
+          </AnimatePresence>
+        </div>
+      );
+    }
 
     return (
       <FieldItem
@@ -435,7 +533,7 @@ export function JsonLevelColumn({
   // ── 렌더 ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="relative flex flex-col min-h-0 flex-1" {...dragHandlers}>
+    <div className={cn('relative flex flex-col min-h-0', !isNested && 'flex-1')} {...dragHandlers}>
       <DropOverlay visible={isColumnDragOver} label={canAddField ? 'Drop a file to import as a field' : 'Fields cannot be added here'} />
       {/* Ref 강조 — 상단 컬러 바 */}
       {chainColor && (
@@ -443,6 +541,11 @@ export function JsonLevelColumn({
           className="h-[3px] w-full shrink-0"
           style={{ background: `linear-gradient(90deg, ${chainColor} 0%, ${chainColor}40 100%)` }}
         />
+      )}
+
+      {/* 재귀 중첩 단계의 헤더 위치 마커 — 최상위 컬럼의 IntersectionObserver가 관찰 */}
+      {isNested && (
+        <div data-chain-sentinel data-chain-depth={myIndex} data-chain-label={path.label} className="h-px w-full" aria-hidden="true" />
       )}
 
       {/* 헤더 */}
@@ -464,7 +567,20 @@ export function JsonLevelColumn({
       </div>
 
       {/* 목록 */}
-      <div className="flex-1 overflow-y-auto min-h-0 px-2 py-2 flex flex-col gap-0.5">
+      <div ref={scrollRef} className={cn('px-2 py-2 flex flex-col gap-0.5', isNested ? 'min-h-0' : 'flex-1 overflow-y-auto min-h-0')}>
+        {!isNested && isInlineChain && chainBreadcrumb.length > 0 && (
+          <div
+            className="sticky -top-2 z-10 shrink-0 -mx-2 -mt-2 mb-1 flex items-center gap-1.5 overflow-x-auto whitespace-nowrap bg-white/95 backdrop-blur px-3 border-b border-slate-100/80"
+            style={{ height: CHAIN_BREADCRUMB_HEIGHT }}
+          >
+            {chainBreadcrumb.map((label, i) => (
+              <span key={i} className="flex items-center gap-1 shrink-0">
+                {i > 0 && <ChevronRight size={12} className="text-slate-300 shrink-0" />}
+                <span className="text-xs font-medium text-slate-500 truncate max-w-[140px]">{label}</span>
+              </span>
+            ))}
+          </div>
+        )}
         {isLoading && !entries.length ? (
           <p className="flex-1 flex items-center justify-center text-sm text-slate-400 py-10">Loading…</p>
         ) : !displayDoc ? (

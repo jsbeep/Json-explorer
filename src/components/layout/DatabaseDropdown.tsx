@@ -213,10 +213,12 @@ export function DatabaseDropdown({ activeDatabase, databases, selectDatabase, on
         aria-haspopup="listbox"
         aria-expanded={isOpen}
       >
+        <div className="flex items-center gap-2">
         <span className={styles.triggerLabel}>Database</span>
         <span className={styles.triggerMeta}>
           <span className={styles.triggerValue}>{selectedLabel}</span>
         </span>
+        </div>
         <ChevronDown className={cn(styles.triggerArrow, isOpen && 'rotate-180')} size={16} />
       </button>
 

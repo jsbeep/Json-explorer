@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FileText, Tag, Check, X } from 'lucide-react';
+import { FileText, Tag, Check, X, ArrowLeft } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import type { ActivePath, CollectionSummary, Document, DocumentSummary, MockMutationRequest } from '../../../types/explorer';
 import { ColumnItem, ColumnSkeletonList } from './ColumnItem';
@@ -30,6 +30,9 @@ interface DocumentsColumnProps {
   onSelectDocument: (oid: string, title: string) => Promise<void>;
   onMutate: (op: MockMutationRequest) => Promise<unknown>;
   onSetEditingId: (id: string | null) => void;
+  // 컬럼 2개(최소) 모드에서 Collections/Documents가 한 패널을 공유할 때만 전달됨 —
+  // 있으면 목록 맨 위에 컬렉션 목록으로 돌아가는 큰 버튼을 보여준다
+  onBack?: () => void;
 }
 
 // ── 컴포넌트 ──────────────────────────────────────────────────────────────────
@@ -48,6 +51,7 @@ export function DocumentsColumn({
   onSelectDocument,
   onMutate,
   onSetEditingId,
+  onBack,
 }: DocumentsColumnProps) {
   const [deleteTarget, setDeleteTarget] = useState<DocumentSummary | null>(null);
   const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
@@ -146,6 +150,18 @@ export function DocumentsColumn({
 
       {/* 목록 */}
       <div className={styles.list}>
+        {onBack && (
+          <button
+            type="button"
+            className="relative flex items-center gap-3 px-4 py-3.5 rounded-2xl cursor-pointer select-none text-left hover:bg-slate-50/80 active:bg-slate-100/50 transition-colors"
+            onClick={onBack}
+          >
+            <span className="shrink-0 w-9 h-9 rounded-xl flex items-center justify-center bg-slate-100 text-slate-500">
+              <ArrowLeft size={16} />
+            </span>
+            <span className="text-sm font-medium text-slate-600">Back to Collections</span>
+          </button>
+        )}
         {isLoading && !documents.length ? (
           <ColumnSkeletonList count={5} />
         ) : (

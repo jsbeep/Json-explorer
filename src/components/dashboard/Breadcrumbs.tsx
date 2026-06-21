@@ -97,7 +97,7 @@ export function Breadcrumbs({ breadcrumbs, onNavigate }: BreadcrumbsProps) {
                     aria-current={isActive ? 'page' : undefined}
                   >
                     {IconComponent && <IconComponent className={styles.icon} />}
-                    <span>{segment.label}</span>
+                    <span className="max-w-40 truncate">{segment.label}</span>
                   </button>
                   {index < breadcrumbs.length - 1 && (
                     <ChevronRight className={styles.chevron} aria-hidden="true" strokeWidth={2.5} />
