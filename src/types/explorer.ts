@@ -10,6 +10,13 @@ export interface DBRef {
   $db: string;
 }
 
+// Relaxed EJSON wrapper 형태 — canonical(예: {"$date":{"$numberLong":"..."}}) 대신
+// 사람이 읽고 편집하기 쉬운 단일 문자열 값으로 둔다(이 앱은 spec-perfect BSON 툴이 아니라
+// JSON 탐색기에 EJSON 시야를 곁들이는 뷰어이므로).
+export interface BsonDate { $date: string }
+export interface BsonDecimal128 { $numberDecimal: string }
+export interface BsonLong { $numberLong: string }
+
 export const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -18,16 +25,41 @@ export const isBsonObjectId = (value: unknown): value is BsonObjectId =>
   Object.keys(value).length === 1 &&
   typeof value.$oid === 'string';
 
+export const isBsonDate = (value: unknown): value is BsonDate =>
+  isPlainObject(value) &&
+  Object.keys(value).length === 1 &&
+  typeof value.$date === 'string';
+
+export const isBsonDecimal128 = (value: unknown): value is BsonDecimal128 =>
+  isPlainObject(value) &&
+  Object.keys(value).length === 1 &&
+  typeof value.$numberDecimal === 'string';
+
+export const isBsonLong = (value: unknown): value is BsonLong =>
+  isPlainObject(value) &&
+  Object.keys(value).length === 1 &&
+  typeof value.$numberLong === 'string';
+
 // ── JSON 원자 타입 ────────────────────────────────────────────────────────────
 
 export type JsonPrimitive = string | number | boolean | null;
-// BsonObjectId, DBRef를 명시적으로 포함해 document 필드 값으로 허용
-export type JsonValue = JsonPrimitive | JsonObject | JsonValue[] | BsonObjectId | DBRef;
+// BsonObjectId, DBRef, EJSON 확장 타입 wrapper를 명시적으로 포함해 document 필드 값으로 허용
+export type JsonValue =
+  | JsonPrimitive
+  | JsonObject
+  | JsonValue[]
+  | BsonObjectId
+  | DBRef
+  | BsonDate
+  | BsonDecimal128
+  | BsonLong;
 export interface JsonObject {
   [key: string]: JsonValue;
 }
 
-export type Document = JsonObject & { _id: BsonObjectId };
+// _id는 옵션 — plain JSON 문서는 _id가 통째로 없을 수 있다(처음엔 그냥 raw JSON으로
+// 두고, PK를 선언하면 그 필드 값이 식별자 역할을 한다. 둘 다 없으면 배열 인덱스로 fallback)
+export type Document = JsonObject & { _id?: BsonObjectId | string | number };
 
 // ── Mock Storage 구조 ─────────────────────────────────────────────────────────
 
@@ -39,6 +71,10 @@ export interface MockCollectionRecord {
   updatedAt: number;
   // DocumentsColumn 목록에 표시할 제목으로 쓸 필드 키 (미지정 시 name → title → OID 순)
   titleKey?: string;
+  // 이 컬렉션의 기본 키 필드 (문서에 _id.$oid가 있으면 UI에서 '_id'로 잠김)
+  primaryKey?: string;
+  // 필드 단위 참조(FK) 선언: 필드 키 → 가리키는 컬렉션/키
+  referenceFields?: Record<string, { targetCollection: string; targetKey: string }>;
 }
 
 export interface MockDatabaseRecord {
@@ -87,6 +123,12 @@ export interface CollectionSummary {
   sizeMb: number;
   updatedAt: number;
   titleKey?: string;
+  primaryKey?: string;
+  referenceFields?: Record<string, { targetCollection: string; targetKey: string }>;
+  // 문서 중 하나라도 _id가 $oid 모양이면 true — PK 버튼 잠금(=_id) 판정에 사용
+  hasOidIds?: boolean;
+  // 문서 중 하나라도 (선언된 PK 또는 기본값 _id) 필드가 없으면 true — PK 버튼 경고 표시에 사용
+  hasPrimaryKeyGaps?: boolean;
 }
 
 export interface DocumentSummary {
@@ -213,13 +255,28 @@ export type MockMutationRequest =
       type: 'upsertDocument';
       database: string;
       collection: string;
-      document: Document;
+      // _id 없이 들어와도 됨 — 핸들러가 ensureDocumentId로 채워준다
+      document: JsonObject;
     }
   | {
       type: 'setCollectionTitleKey';
       database: string;
       collection: string;
       titleKey: string;
+    }
+  | {
+      type: 'setCollectionPrimaryKey';
+      database: string;
+      collection: string;
+      primaryKey: string;
+    }
+  | {
+      type: 'setCollectionReferenceField';
+      database: string;
+      collection: string;
+      field: string;
+      targetCollection?: string;
+      targetKey?: string;
     }
   | {
       type: 'deleteDocument';
@@ -270,10 +327,14 @@ export interface NormalActivePath extends BaseActivePath {
   projectionPath?: string[];
 }
 
+export type RefLocator =
+  | { kind: 'oid'; oid: string }
+  | { kind: 'field'; database: string; collection: string; key: string; value: JsonValue };
+
 export interface ReferenceActivePath extends BaseActivePath {
   kind: 'reference';
   columnKind: 'json';
-  refOid: string;
+  ref: RefLocator;
   projectionPath: string[];
   chainColor: string;
   chainIndex: number;

@@ -7,10 +7,10 @@ import { AddItemButton } from './AddItemButton';
 import { DropOverlay } from './DropOverlay';
 import { InlineSegmentEditor } from '../../editors/InlineSegmentEditor';
 import { DeleteConfirmModal } from '../../common/DeleteConfirmModal';
+import { ReferenceFieldsManager } from './ReferenceFieldsManager';
 import { getSnapshot } from '../../../services/mockStorage';
 import { columnListStyles as styles } from './columnListStyles';
 import { isPathChanged } from '../../../utils/changedPaths';
-import { generateObjectId } from '../../../utils/objectId';
 import { useFileDrop } from '../../../hooks/useFileDrop';
 import { ANIMATION_DISABLE_THRESHOLD_MB } from '../../../utils/motionPresets';
 
@@ -45,6 +45,7 @@ export function CollectionsColumn({
 }: CollectionsColumnProps) {
   const [deleteTarget, setDeleteTarget] = useState<CollectionSummary | null>(null);
   const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
+  const [refsManagerTarget, setRefsManagerTarget] = useState<{ collectionName: string; suggestedFieldKeys: string[] } | null>(null);
   const databaseName = path.kind === 'normal' ? (path.databaseName ?? '') : '';
 
   // 컬럼 전체에 파일을 드롭하면 "컬렉션 추가" 에디터를 열고 그 파일을 업로드한 것처럼 처리
@@ -157,27 +158,30 @@ export function CollectionsColumn({
             siblingKeys={collections.map((c) => c.name)}
             onSubmit={async (data) => {
               if (data.importedJson && typeof data.importedJson === 'object' && !Array.isArray(data.importedJson)) {
-                const imported = data.importedJson as { name?: string; label?: string; description?: string; documents?: Document[]; _id?: unknown };
-                // documents 배열이 없으면 컬렉션 envelope가 아니라 문서 1개를 붙여넣은 것으로 간주하고 그대로 감싼다
-                const hasValidOid = imported._id && typeof imported._id === 'object' && !Array.isArray(imported._id) &&
-                  typeof (imported._id as Record<string, unknown>).$oid === 'string';
+                const imported = data.importedJson as { name?: string; label?: string; description?: string; documents?: Document[] };
+                // documents 배열이 없으면 컬렉션 envelope가 아니라 문서 1개를 붙여넣은 것으로 간주하고 그대로 감싼다.
+                // _id(있으면 oid든 plain 값이든)는 손대지 않는다 — createCollection 핸들러가
+                // ensureDocumentId로 각 문서에 일괄 적용한다
                 const documents = Array.isArray(imported.documents)
                   ? imported.documents
-                  : [{
-                      ...(data.importedJson as Document),
-                      _id: hasValidOid ? (imported._id as Document['_id']) : { $oid: generateObjectId() },
-                    }];
+                  : [data.importedJson as Document];
+                const newCollectionName = imported.name ?? data.key;
                 await onMutate({
                   type: 'createCollection',
                   database: databaseName,
                   collection: {
-                    name: imported.name ?? data.key,
+                    name: newCollectionName,
                     label: imported.label ?? data.label ?? data.key,
                     description: imported.description ?? '',
                     documents,
                   },
                 });
                 onSetEditingId(null);
+                // 문서 여러 개를 한 번에 들여온 import만 — 단일 문서 추가엔 굳이 안 띄움
+                if (documents.length > 1) {
+                  const suggestedFieldKeys = Array.from(new Set(documents.flatMap((d) => Object.keys(d))));
+                  setRefsManagerTarget({ collectionName: newCollectionName, suggestedFieldKeys });
+                }
                 return;
               }
               await handleAddCollection(data.key, data.label ?? data.key, '');
@@ -212,6 +216,21 @@ export function CollectionsColumn({
           targetLabel={deleteTarget.label}
           onConfirm={handleDelete}
           onCancel={() => setDeleteTarget(null)}
+        />,
+        document.body
+      )}
+
+      {/* import 직후 일괄 참조(FK) 설정 — 평상시 관리 UI와 동일한 컴포넌트 재사용 */}
+      {refsManagerTarget && createPortal(
+        <ReferenceFieldsManager
+          isOpen
+          database={databaseName}
+          collection={refsManagerTarget.collectionName}
+          referenceFields={collections.find((c) => c.name === refsManagerTarget.collectionName)?.referenceFields ?? {}}
+          collections={collections}
+          suggestedFieldKeys={refsManagerTarget.suggestedFieldKeys}
+          onMutate={onMutate}
+          onClose={() => setRefsManagerTarget(null)}
         />,
         document.body
       )}

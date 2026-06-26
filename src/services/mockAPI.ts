@@ -15,18 +15,22 @@ import {
   type Document,
   type DocumentSummary,
   type FriendlyPatchEvent,
+  type JsonValue,
   type MockCollectionRecord,
   type MockMutationRequest,
   type MockMutationResult,
 } from '../types/explorer';
-import { cloneCollectionMap, cloneDocument } from './mockClone';
+import { cloneCollectionMap, cloneDocument, ensureDocumentId } from './mockClone';
 import {
   collectionKey,
   estimateCollectionSizeMb,
   findCollection,
   findDocument,
+  findDocumentById,
+  findDocumentsByField,
+  findFieldValueCandidates,
   getDatabaseSummary,
-  getDocumentOid,
+  getDocumentId,
   projectDocument,
   summarizeDocument,
 } from './mockQuery';
@@ -92,6 +96,11 @@ export const getCollections = async (dbId: string): Promise<CollectionSummary[]>
     sizeMb: estimateCollectionSizeMb(collection.documents),
     updatedAt: collection.updatedAt,
     titleKey: collection.titleKey,
+    primaryKey: collection.primaryKey,
+    referenceFields: collection.referenceFields,
+    hasOidIds: collection.documents.some((d) => isBsonObjectId(d._id)),
+    // (선언된 PK가 있으면 그 필드, 없으면 기본값 _id 기준) 식별값이 없는 문서가 하나라도 있는지
+    hasPrimaryKeyGaps: collection.documents.some((d) => getDocumentId(d, collection.primaryKey) === undefined),
   }));
 };
 
@@ -102,7 +111,9 @@ export const getDocuments = async (collectionId: string): Promise<DocumentSummar
     return rejectWith('Collection not found');
   }
 
-  return location.collection.documents.map((document) => summarizeDocument(document, location.collection.updatedAt, location.collection.titleKey));
+  return location.collection.documents.map((document, index) =>
+    summarizeDocument(document, location.collection.updatedAt, location.collection.titleKey, location.collection.primaryKey, index),
+  );
 };
 
 export const mutateData = async (op: MockMutationRequest): Promise<MockMutationResult> => {
@@ -189,10 +200,13 @@ export const mutateData = async (op: MockMutationRequest): Promise<MockMutationR
         collections[newCollectionName] = {
           ...collection,
           name: newCollectionName,
-          documents: collection.documents.map((document) => ({
-            ...cloneDocument(document),
-            _id: { $oid: generateObjectId() },
-          })),
+          // oid는 전역에서 유니크해야 하므로 새로 생성 — plain _id(또는 없음)는 그대로 둔다
+          // (FK 매칭은 컬렉션 단위라 충돌 걱정 없음)
+          documents: collection.documents.map((document) => {
+            const cloned = cloneDocument(document);
+            if (isBsonObjectId(cloned._id)) cloned._id = { $oid: generateObjectId() };
+            return cloned;
+          }),
           updatedAt: now,
         };
       }
@@ -251,11 +265,15 @@ export const mutateData = async (op: MockMutationRequest): Promise<MockMutationR
         return rejectWith('DB not found');
       }
 
+      // 배치 안에 유효한 oid _id가 하나라도 있으면 누락된 문서는 oid로 통일하고,
+      // 전부 없으면(진짜 plain JSON일 신호) 그대로 _id 없이 둔다
+      const importedDocs = (op.collection.documents ?? []).map((document) => cloneDocument(document));
+      const batchHasOid = importedDocs.some((d) => isBsonObjectId(d._id));
       database.collections[op.collection.name] = {
         name: op.collection.name,
         label: op.collection.label,
         description: op.collection.description,
-        documents: (op.collection.documents ?? []).map((document) => cloneDocument(document)),
+        documents: importedDocs.map((document) => ensureDocumentId(document, batchHasOid)),
         updatedAt: now,
       };
 
@@ -326,10 +344,11 @@ export const mutateData = async (op: MockMutationRequest): Promise<MockMutationR
         ...source,
         name: newCollectionName,
         label: `${source.label} Copy`,
-        documents: source.documents.map((document) => ({
-          ...cloneDocument(document),
-          _id: { $oid: generateObjectId() },
-        })),
+        documents: source.documents.map((document) => {
+          const cloned = cloneDocument(document);
+          if (isBsonObjectId(cloned._id)) cloned._id = { $oid: generateObjectId() };
+          return cloned;
+        }),
         updatedAt: now,
       };
 
@@ -398,6 +417,65 @@ export const mutateData = async (op: MockMutationRequest): Promise<MockMutationR
         collectionKey: collectionKey(op.database, op.collection),
       };
     }
+    case 'setCollectionPrimaryKey': {
+      const database = snapshot.databases[op.database];
+      if (!database) {
+        return rejectWith('DB not found');
+      }
+
+      const collection = database.collections[op.collection];
+      if (!collection) {
+        return rejectWith('Collection not found');
+      }
+
+      // oid 컬렉션 잠금은 UI에서만 막는다(titleKey와 동일한 신뢰 수준) — 핸들러는 검증하지 않음
+      collection.primaryKey = op.primaryKey.trim() === '' ? undefined : op.primaryKey.trim();
+      updateCollectionTimestamps(snapshot, op.database, op.collection, now);
+      setSnapshot(snapshot);
+      emitCollectionReplace(op.database, op.collection, collection.documents);
+
+      return {
+        status: 'ok',
+        snapshot: getSnapshot(),
+        changedPaths: [`databases.${op.database}.collections.${op.collection}`],
+        tracePath: [op.database, op.collection],
+        collectionKey: collectionKey(op.database, op.collection),
+      };
+    }
+    case 'setCollectionReferenceField': {
+      const database = snapshot.databases[op.database];
+      if (!database) {
+        return rejectWith('DB not found');
+      }
+
+      const collection = database.collections[op.collection];
+      if (!collection) {
+        return rejectWith('Collection not found');
+      }
+
+      if (!op.targetCollection || !op.targetKey) {
+        if (collection.referenceFields) {
+          delete collection.referenceFields[op.field];
+        }
+      } else {
+        collection.referenceFields = {
+          ...collection.referenceFields,
+          [op.field]: { targetCollection: op.targetCollection, targetKey: op.targetKey },
+        };
+      }
+
+      updateCollectionTimestamps(snapshot, op.database, op.collection, now);
+      setSnapshot(snapshot);
+      emitCollectionReplace(op.database, op.collection, collection.documents);
+
+      return {
+        status: 'ok',
+        snapshot: getSnapshot(),
+        changedPaths: [`databases.${op.database}.collections.${op.collection}`],
+        tracePath: [op.database, op.collection],
+        collectionKey: collectionKey(op.database, op.collection),
+      };
+    }
     case 'upsertDocument': {
       const database = snapshot.databases[op.database];
       if (!database) {
@@ -409,19 +487,19 @@ export const mutateData = async (op: MockMutationRequest): Promise<MockMutationR
         return rejectWith('Collection not found');
       }
 
-      const documentOid = getDocumentOid(op.document);
-      if (!documentOid) {
-        return rejectWith('Document _id is required');
-      }
-
-      const clonedDocument = cloneDocument(op.document);
-      const existingIndex = collection.documents.findIndex((candidate) => getDocumentOid(candidate) === documentOid);
+      const hasOidSibling = collection.documents.some((d) => isBsonObjectId(d._id));
+      const clonedDocument = cloneDocument(ensureDocumentId(op.document, hasOidSibling));
+      // 새 문서면 push될 자리(현재 길이)를 잠정 인덱스로 써서 id를 미리 구한다 —
+      // _id/PK가 둘 다 없을 때만 의미 있고(인덱스 fallback), 그 외엔 무관하다
+      const provisionalIndex = collection.documents.length;
+      const documentId = getDocumentId(clonedDocument, collection.primaryKey, provisionalIndex) ?? '';
+      const existingIndex = collection.documents.findIndex((candidate, i) => getDocumentId(candidate, collection.primaryKey, i) === documentId);
       const oldDocument = existingIndex >= 0 ? cloneDocument(collection.documents[existingIndex]) : undefined;
 
-      // changedPaths/패치 이벤트의 경로는 배열 index가 아니라 문서 oid로 식별한다 —
+      // changedPaths/패치 이벤트의 경로는 배열 index가 아니라 문서 id로 식별한다 —
       // index는 같은 컬렉션 안에서도 추가/삭제로 흔들리는데, 이 경로는 UI에서
       // "정확히 이 문서가 바뀌었는지"를 비교하는 키로 쓰인다(예: 하이라이트).
-      const changedPath = `documents.${documentOid}`;
+      const changedPath = `documents.${documentId}`;
       let changeEvent: FriendlyPatchEvent;
       if (existingIndex >= 0) {
         collection.documents[existingIndex] = clonedDocument;
@@ -438,14 +516,14 @@ export const mutateData = async (op: MockMutationRequest): Promise<MockMutationR
         database: op.database,
         collection: op.collection,
         patch: [changeEvent],
-        tracePath: [op.database, op.collection, documentOid],
+        tracePath: [op.database, op.collection, documentId],
       });
 
       return {
         status: 'ok',
         snapshot: getSnapshot(),
         changedPaths: [`databases.${op.database}.collections.${op.collection}.${changedPath}`],
-        tracePath: [op.database, op.collection, documentOid],
+        tracePath: [op.database, op.collection, documentId],
         collectionKey: collectionKey(op.database, op.collection),
       };
     }
@@ -460,13 +538,25 @@ export const mutateData = async (op: MockMutationRequest): Promise<MockMutationR
         return rejectWith('Collection not found');
       }
 
-      const source = collection.documents.find((candidate) => getDocumentOid(candidate) === op.documentId);
+      const source = collection.documents.find((candidate, i) => getDocumentId(candidate, collection.primaryKey, i) === op.documentId);
       if (!source) {
         return rejectWith('Document not found');
       }
 
-      const newDocument = { ...cloneDocument(source), _id: { $oid: generateObjectId() } };
-      const newOid = getDocumentOid(newDocument) ?? '';
+      // _id 모양을 보존한다 — oid면 새 oid, plain string/number면 그 컬렉션 안에서
+      // 유니크한 변형("u1" → "u1-copy")을 생성한다(컬렉션/DB 이름 충돌 회피와 같은 패턴).
+      // 원본에 _id가 통째로 없었으면(plain raw 문서) 복제본도 그대로 둔다 — 인덱스
+      // fallback으로 식별이 계속 가능하다.
+      const newDocument = cloneDocument(source);
+      if (isBsonObjectId(source._id)) {
+        newDocument._id = { $oid: generateObjectId() };
+      } else if (typeof source._id === 'string' || typeof source._id === 'number') {
+        const existingIds = new Set(collection.documents.map((d, i) => getDocumentId(d, collection.primaryKey, i) ?? ''));
+        newDocument._id = generateUniqueKey(String(source._id), existingIds);
+      }
+
+      const provisionalIndex = collection.documents.length;
+      const newDocId = getDocumentId(newDocument, collection.primaryKey, provisionalIndex) ?? '';
       collection.documents.push(newDocument);
 
       updateCollectionTimestamps(snapshot, op.database, op.collection, now);
@@ -475,15 +565,15 @@ export const mutateData = async (op: MockMutationRequest): Promise<MockMutationR
         type: 'patch',
         database: op.database,
         collection: op.collection,
-        patch: [toChangeEvent(`documents.${newOid}`, 'added', undefined, newDocument)],
-        tracePath: [op.database, op.collection, newOid],
+        patch: [toChangeEvent(`documents.${newDocId}`, 'added', undefined, newDocument)],
+        tracePath: [op.database, op.collection, newDocId],
       });
 
       return {
         status: 'ok',
         snapshot: getSnapshot(),
-        changedPaths: [`databases.${op.database}.collections.${op.collection}.documents.${newOid}`],
-        tracePath: [op.database, op.collection, newOid],
+        changedPaths: [`databases.${op.database}.collections.${op.collection}.documents.${newDocId}`],
+        tracePath: [op.database, op.collection, newDocId],
         collectionKey: collectionKey(op.database, op.collection),
       };
     }
@@ -498,7 +588,7 @@ export const mutateData = async (op: MockMutationRequest): Promise<MockMutationR
         return rejectWith('Collection not found');
       }
 
-      const index = collection.documents.findIndex((candidate) => getDocumentOid(candidate) === op.documentId);
+      const index = collection.documents.findIndex((candidate, i) => getDocumentId(candidate, collection.primaryKey, i) === op.documentId);
       if (index < 0) {
         return rejectWith('Document not found');
       }
@@ -533,7 +623,7 @@ export const mutateData = async (op: MockMutationRequest): Promise<MockMutationR
         return rejectWith('Collection not found');
       }
 
-      const documentIndex = collection.documents.findIndex((candidate) => getDocumentOid(candidate) === op.documentId);
+      const documentIndex = collection.documents.findIndex((candidate, i) => getDocumentId(candidate, collection.primaryKey, i) === op.documentId);
       if (documentIndex < 0) {
         return rejectWith('Document not found');
       }
@@ -614,6 +704,46 @@ export const getReferenceInfo = async (oid: string): Promise<ReferenceInfo | nul
   };
 };
 
+export interface FieldReferenceCandidate {
+  database: string;
+  collection: string;
+  documentId: string;
+  documentTitle: string;
+}
+
+// 필드 기반 참조(FK) — 타겟 컬렉션이 이미 선언으로 고정돼 있으므로 그 안에서만 찾고,
+// PK 유니크를 강제하지 않으므로 매치를 전부 후보로 반환한다(숨기지 않음 — 호출부가
+// 1개면 바로 이동, 여러 개면 사용자에게 골라달라고 보여준다).
+export const getReferenceCandidatesByField = async (
+  database: string,
+  collection: string,
+  key: string,
+  value: JsonValue,
+): Promise<FieldReferenceCandidate[]> => {
+  const snapshot = getSnapshot();
+  const locations = findDocumentsByField(snapshot, database, collection, key, value);
+  return locations.map((location) => {
+    const summary = summarizeDocument(location.document, location.collection.updatedAt, location.collection.titleKey, location.collection.primaryKey, location.documentIndex);
+    return {
+      database: location.databaseName,
+      collection: location.collectionName,
+      documentId: getDocumentId(location.document, location.collection.primaryKey, location.documentIndex) ?? '',
+      documentTitle: summary.title,
+    };
+  });
+};
+
+// FK 값 입력 보조용(InlineSegmentEditor 자동완성) — 타겟 컬렉션의 targetKey 필드가
+// 가질 수 있는 값 후보 목록
+export const getFieldValueCandidates = async (
+  database: string,
+  collection: string,
+  key: string,
+): Promise<{ value: JsonValue; title: string }[]> => {
+  const snapshot = getSnapshot();
+  return findFieldValueCandidates(snapshot, database, collection, key);
+};
+
 export const getDocumentById = async (oid: string, projectionPath?: string[]): Promise<Document> => {
   const snapshot = getSnapshot();
   const location = findDocument(snapshot, oid);
@@ -628,10 +758,21 @@ export const getDocumentById = async (oid: string, projectionPath?: string[]): P
   return projectDocument(location.document, projectionPath);
 };
 
-// 프로젝션 없이 원본 전체 문서 반환 (로컬 JSON 탐색용)
+// 프로젝션 없이 원본 전체 문서 반환 (로컬 JSON 탐색용) — 전역 $oid REF 전용, oid 없이는 못 찾음
 export const getFullDocumentById = async (oid: string): Promise<Document> => {
   const snapshot = getSnapshot();
   const location = findDocument(snapshot, oid);
+  if (!location) {
+    return rejectWith('Document not found');
+  }
+  return cloneDocument(location.document);
+};
+
+// 컬렉션이 이미 정해진 상태(현재 보고 있는 문서 열기/새로고침)에서 쓰는 일반화 버전 —
+// _id가 oid든 plain string/number든 그 컬렉션 안에서 찾는다
+export const getFullDocumentByIdInCollection = async (database: string, collection: string, documentId: string): Promise<Document> => {
+  const snapshot = getSnapshot();
+  const location = findDocumentById(snapshot, database, collection, documentId);
   if (!location) {
     return rejectWith('Document not found');
   }

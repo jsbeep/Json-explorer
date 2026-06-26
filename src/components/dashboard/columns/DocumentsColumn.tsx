@@ -1,15 +1,15 @@
 import { useState } from 'react';
-import { FileText, Tag, Check, X, ArrowLeft } from 'lucide-react';
+import { FileText, Tag, Check, X, ArrowLeft, KeyRound, Lock, Link, AlertTriangle } from 'lucide-react';
 import { createPortal } from 'react-dom';
-import type { ActivePath, CollectionSummary, Document, DocumentSummary, MockMutationRequest } from '../../../types/explorer';
+import type { ActivePath, CollectionSummary, DocumentSummary, JsonObject, MockMutationRequest } from '../../../types/explorer';
 import { ColumnItem, ColumnSkeletonList } from './ColumnItem';
 import { AddItemButton } from './AddItemButton';
 import { DropOverlay } from './DropOverlay';
 import { InlineSegmentEditor } from '../../editors/InlineSegmentEditor';
 import { DeleteConfirmModal } from '../../common/DeleteConfirmModal';
-import { generateObjectId } from '../../../utils/objectId';
+import { ReferenceFieldsManager } from './ReferenceFieldsManager';
 import { cn } from '../../../utils/cn';
-import { getFullDocumentById } from '../../../services/mockAPI';
+import { getFullDocumentByIdInCollection } from '../../../services/mockAPI';
 import { columnListStyles as styles } from './columnListStyles';
 import { isPathChanged } from '../../../utils/changedPaths';
 import { useFileDrop } from '../../../hooks/useFileDrop';
@@ -56,10 +56,20 @@ export function DocumentsColumn({
   const [deleteTarget, setDeleteTarget] = useState<DocumentSummary | null>(null);
   const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
   const collectionLabel = path.kind === 'normal' ? path.label : '';
-  const currentTitleKey = collections.find((c) => c.name === activeCollectionName)?.titleKey;
+  const activeCollectionSummary = collections.find((c) => c.name === activeCollectionName);
+  const currentTitleKey = activeCollectionSummary?.titleKey;
+  const currentPrimaryKey = activeCollectionSummary?.primaryKey;
+  // _id.$oid를 쓰는 문서가 하나라도 있으면 PK는 항상 '_id' — 기존 oid REF 메커니즘을 따른다
+  const isPrimaryKeyLocked = activeCollectionSummary?.hasOidIds ?? false;
+  // 현재 PK(또는 기본값 _id) 필드가 없는 문서가 하나라도 있으면 경고 표시
+  const hasPrimaryKeyGaps = activeCollectionSummary?.hasPrimaryKeyGaps ?? false;
+  const referenceFields = activeCollectionSummary?.referenceFields ?? {};
 
   const [isEditingTitleKey, setIsEditingTitleKey] = useState(false);
   const [titleKeyInput, setTitleKeyInput] = useState('');
+  const [isEditingPrimaryKey, setIsEditingPrimaryKey] = useState(false);
+  const [primaryKeyInput, setPrimaryKeyInput] = useState('');
+  const [isManagingRefs, setIsManagingRefs] = useState(false);
 
   // 컬럼 전체에 파일을 드롭하면 "문서 추가" 에디터를 열고 그 파일을 업로드한 것처럼 처리
   const { isDragOver: isColumnDragOver, dragHandlers } = useFileDrop((file) => {
@@ -87,6 +97,17 @@ export function DocumentsColumn({
       titleKey: titleKeyInput.trim(),
     });
     setIsEditingTitleKey(false);
+  };
+
+  const handleSavePrimaryKey = async () => {
+    if (!activeCollectionName || !activeDatabaseName) return;
+    await onMutate({
+      type: 'setCollectionPrimaryKey',
+      database: activeDatabaseName,
+      collection: activeCollectionName,
+      primaryKey: primaryKeyInput.trim(),
+    });
+    setIsEditingPrimaryKey(false);
   };
 
   return (
@@ -124,6 +145,35 @@ export function DocumentsColumn({
               <X size={14} />
             </button>
           </>
+        ) : isEditingPrimaryKey ? (
+          <>
+            <input
+              autoFocus
+              type="text"
+              className="flex-1 min-w-0 text-xs px-2 py-1 rounded-lg bg-slate-100/80 text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400/60 focus:bg-white transition-all"
+              placeholder="Field key to use as primary key (e.g. code)"
+              value={primaryKeyInput}
+              onChange={(e) => setPrimaryKeyInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void handleSavePrimaryKey();
+                if (e.key === 'Escape') setIsEditingPrimaryKey(false);
+              }}
+            />
+            <button
+              type="button"
+              className="p-1.5 rounded-lg text-emerald-500 hover:bg-emerald-50 transition-colors shrink-0"
+              onClick={() => void handleSavePrimaryKey()}
+            >
+              <Check size={14} />
+            </button>
+            <button
+              type="button"
+              className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 transition-colors shrink-0"
+              onClick={() => setIsEditingPrimaryKey(false)}
+            >
+              <X size={14} />
+            </button>
+          </>
         ) : (
           <>
             <FileText size={14} className={styles.headerIcon} />
@@ -142,6 +192,44 @@ export function DocumentsColumn({
             >
               <Tag size={12} />
               <span className="text-[11px] font-mono">{currentTitleKey ?? 'name'}</span>
+            </button>
+            <button
+              type="button"
+              className={cn(
+                'relative flex items-center gap-1 px-2 py-1 rounded-lg transition-colors shrink-0',
+                hasPrimaryKeyGaps ? 'bg-red-50 hover:bg-red-100 text-red-500 hover:text-red-600' : 'bg-slate-100 hover:bg-slate-200/70 text-slate-500 hover:text-slate-700',
+                (!activeCollectionName || isPrimaryKeyLocked) && 'opacity-40 pointer-events-none',
+              )}
+              title={
+                isPrimaryKeyLocked
+                  ? 'OID 컬렉션은 PK가 _id로 고정됩니다'
+                  : hasPrimaryKeyGaps
+                    ? `일부 문서에 PK 필드(${currentPrimaryKey ?? '_id'})가 없습니다`
+                    : 'Select field to use as primary key'
+              }
+              onClick={() => {
+                if (isPrimaryKeyLocked) return;
+                setPrimaryKeyInput(currentPrimaryKey ?? '_id');
+                setIsEditingPrimaryKey(true);
+              }}
+            >
+              {hasPrimaryKeyGaps && (
+                <AlertTriangle size={10} className="absolute -top-1.5 -right-1.5 text-red-500 bg-white rounded-full" />
+              )}
+              {isPrimaryKeyLocked ? <Lock size={12} /> : <KeyRound size={12} />}
+              <span className="text-[11px] font-mono">{isPrimaryKeyLocked ? '_id' : currentPrimaryKey ?? '_id'}</span>
+            </button>
+            <button
+              type="button"
+              className={cn(
+                'flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200/70 text-slate-500 hover:text-slate-700 transition-colors shrink-0',
+                !activeCollectionName && 'opacity-40 pointer-events-none',
+              )}
+              title="Manage field-based references (FK)"
+              onClick={() => setIsManagingRefs(true)}
+            >
+              <Link size={12} />
+              <span className="text-[11px] font-mono">{Object.keys(referenceFields).length}</span>
             </button>
             <span className={styles.headerCount}>{documents.length}</span>
           </>
@@ -179,7 +267,7 @@ export function DocumentsColumn({
                   level="document"
                   initialKey={doc.title}
                   siblingKeys={[]}
-                  onExportRequest={() => getFullDocumentById(doc.id)}
+                  onExportRequest={() => getFullDocumentByIdInCollection(activeDatabaseName ?? '', activeCollectionName ?? '', doc.id)}
                   onSubmit={async (data) => {
                     if (!activeCollectionName || !activeDatabaseName) return;
                     await onMutate({
@@ -232,21 +320,12 @@ export function DocumentsColumn({
             siblingKeys={[]}
             onSubmit={async (data) => {
               if (!activeCollectionName || !activeDatabaseName) return;
-              let newDoc: Document;
-              if (data.importedJson && typeof data.importedJson === 'object' && !Array.isArray(data.importedJson)) {
-                const imported = data.importedJson as Record<string, unknown>;
-                const hasValidOid = imported._id && typeof imported._id === 'object' && !Array.isArray(imported._id) &&
-                  typeof (imported._id as Record<string, unknown>).$oid === 'string';
-                newDoc = {
-                  ...(imported as Document),
-                  _id: hasValidOid ? (imported._id as Document['_id']) : { $oid: generateObjectId() },
-                };
-              } else {
-                newDoc = {
-                  _id: { $oid: generateObjectId() },
-                  [currentTitleKey ?? 'name']: data.key,
-                };
-              }
+              // _id(있으면 oid든 plain 값이든)는 손대지 않고 그대로 넘긴다 — 없거나 깨져있으면
+              // upsertDocument 핸들러가 ensureDocumentId로 채워준다
+              const newDoc: JsonObject =
+                data.importedJson && typeof data.importedJson === 'object' && !Array.isArray(data.importedJson)
+                  ? (data.importedJson as JsonObject)
+                  : { [currentTitleKey ?? 'name']: data.key };
               await onMutate({
                 type: 'upsertDocument',
                 database: activeDatabaseName,
@@ -285,6 +364,20 @@ export function DocumentsColumn({
           targetLabel={deleteTarget.title}
           onConfirm={handleDeleteDocument}
           onCancel={() => setDeleteTarget(null)}
+        />,
+        document.body,
+      )}
+
+      {/* 참조(FK) 관리 모달 */}
+      {isManagingRefs && activeDatabaseName && activeCollectionName && createPortal(
+        <ReferenceFieldsManager
+          isOpen={isManagingRefs}
+          database={activeDatabaseName}
+          collection={activeCollectionName}
+          referenceFields={referenceFields}
+          collections={collections}
+          onMutate={onMutate}
+          onClose={() => setIsManagingRefs(false)}
         />,
         document.body,
       )}

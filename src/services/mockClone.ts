@@ -9,6 +9,7 @@ import {
   type MockDatabaseRecord,
   type MockSnapshot,
 } from '../types/explorer';
+import { generateObjectId } from '../utils/objectId';
 
 export const isJsonObject = (value: unknown): value is JsonObject => isPlainObject(value) && !isBsonObjectId(value);
 
@@ -34,6 +35,25 @@ export const cloneValue = (value: JsonValue): JsonValue => {
 };
 
 export const cloneDocument = (document: Document): Document => cloneValue(document) as Document;
+
+// 들어온 객체의 _id가 유효한 {$oid}거나 비어있지 않은 string/number면 그대로 둔다.
+// 없거나 깨져있을 때: forceOid가 true면(이 컬렉션/배치에 이미 oid _id가 있어서 일관성을
+// 맞춰야 할 때) 새 oid를 채우고, 아니면 손대지 않고 그대로 둔다(plain JSON은 _id 없이
+// raw 그대로 — PK를 선언하기 전까진 식별자가 따로 필요 없다, 필요하면 배열 인덱스로 fallback).
+export const ensureDocumentId = (raw: JsonObject, forceOid = false): Document => {
+  const candidate = (raw as Partial<Document>)._id;
+  const hasUsableId =
+    isBsonObjectId(candidate) ||
+    ((typeof candidate === 'string' || typeof candidate === 'number') && String(candidate).trim() !== '');
+
+  if (hasUsableId) {
+    return { ...raw, _id: candidate as Document['_id'] } as Document;
+  }
+  if (forceOid) {
+    return { ...raw, _id: { $oid: generateObjectId() } } as Document;
+  }
+  return { ...raw } as Document;
+};
 
 export const cloneCollectionMap = (snapshot: MockSnapshot): MockSnapshot => {
   const databases: Record<string, MockDatabaseRecord> = {};

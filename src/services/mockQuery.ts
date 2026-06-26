@@ -80,9 +80,17 @@ const summarizePreviewValue = (value: JsonValue): string => {
   return '{...}';
 };
 
-export const summarizeDocument = (document: Document, updatedAt: number, titleKey?: string): DocumentSummary => {
-  const oid = isBsonObjectId(document._id) ? document._id.$oid : undefined;
-  let title = oid ? oid.slice(-8) : '[document]';
+export const summarizeDocument = (
+  document: Document,
+  updatedAt: number,
+  titleKey?: string,
+  primaryKey?: string,
+  index?: number,
+): DocumentSummary => {
+  const id = getDocumentId(document, primaryKey, index);
+  // 인덱스 fallback 토큰은 사용자에게 보여줄 의미가 없으니 표시용으로는 없는 셈 취급
+  const displayableId = id && !id.startsWith(INDEX_FALLBACK_PREFIX) ? id : undefined;
+  let title = displayableId ? (isBsonObjectId(document._id) ? displayableId.slice(-8) : displayableId) : '[document]';
 
   if (titleKey) {
     const candidate = document[titleKey];
@@ -105,7 +113,7 @@ export const summarizeDocument = (document: Document, updatedAt: number, titleKe
   }
 
   return {
-    id: oid ?? '',
+    id: id ?? '',
     title,
     preview: previewParts.join(', '),
     fieldCount: Object.keys(document).length,
@@ -150,7 +158,96 @@ export const findDocument = (snapshot: MockSnapshot, oid: string): DocumentLocat
   return undefined;
 };
 
-export const getDocumentOid = (document: Document): string | undefined => (isBsonObjectId(document._id) ? document._id.$oid : undefined);
+// 문서 identity — plain string/number _id도 식별자로 인정한다(전역 $oid REF 시스템인
+// findDocument/checkReference는 oid만 보도록 별도로 inline 비교를 쓰고 이 함수에 의존하지 않는다).
+// mutate/delete/duplicate/upsert 같은 "문서 자체를 가리키는" 경로에서 쓴다.
+//
+// _id가 없으면 컬렉션에 선언된 primaryKey 필드의 값을 식별자로 쓰고, 그 값도 없으면
+// (식별자가 정말 하나도 없는 raw plain 문서) 배열 인덱스로 fallback한다 — plain JSON을
+// 그대로 두고 싶다는 게 이 앱의 목표라, _id/PK가 없다고 강제로 뭔가를 채워 넣지 않는다.
+export const INDEX_FALLBACK_PREFIX = '__idx_';
+
+export const getDocumentId = (document: Document, primaryKey?: string, fallbackIndex?: number): string | undefined => {
+  if (isBsonObjectId(document._id)) return document._id.$oid;
+  if (typeof document._id === 'string' || typeof document._id === 'number') return String(document._id);
+  if (primaryKey) {
+    const candidate = document[primaryKey];
+    if (typeof candidate === 'string' || typeof candidate === 'number') return String(candidate);
+  }
+  if (fallbackIndex !== undefined) return `${INDEX_FALLBACK_PREFIX}${fallbackIndex}`;
+  return undefined;
+};
+
+export const findDocumentById = (
+  snapshot: MockSnapshot,
+  databaseName: string,
+  collectionName: string,
+  documentId: string,
+): DocumentLocation | undefined => {
+  const collection = snapshot.databases[databaseName]?.collections[collectionName];
+  if (!collection) {
+    return undefined;
+  }
+
+  for (let documentIndex = 0; documentIndex < collection.documents.length; documentIndex += 1) {
+    const document = collection.documents[documentIndex];
+    if (getDocumentId(document, collection.primaryKey, documentIndex) === documentId) {
+      return { databaseName, collectionName, collection, documentIndex, document };
+    }
+  }
+
+  return undefined;
+};
+
+// FK 값 입력 보조용 — 타겟 컬렉션의 targetKey 필드가 가질 수 있는 값 후보 목록
+// (key가 '_id'면 oid든 plain이든 getDocumentId로, 그 외엔 그 필드의 원시값으로)
+export const findFieldValueCandidates = (
+  snapshot: MockSnapshot,
+  databaseName: string,
+  collectionName: string,
+  key: string,
+): { value: JsonValue; title: string }[] => {
+  const collection = snapshot.databases[databaseName]?.collections[collectionName];
+  if (!collection) {
+    return [];
+  }
+
+  const candidates: { value: JsonValue; title: string }[] = [];
+  for (let index = 0; index < collection.documents.length; index += 1) {
+    const document = collection.documents[index];
+    const value = key === '_id' ? (getDocumentId(document, collection.primaryKey, index) ?? null) : document[key];
+    if (value === undefined || value === null || value === '') continue;
+    const summary = summarizeDocument(document, collection.updatedAt, collection.titleKey, collection.primaryKey, index);
+    candidates.push({ value: value as JsonValue, title: summary.title });
+  }
+  return candidates;
+};
+
+// 필드 기반 참조(FK) 조회 — findDocument(oid 전역 검색)와 달리 DB/컬렉션이 이미 선언으로
+// 고정돼 있고, PK 유니크를 강제하지 않으므로 매치를 전부 모아 반환한다(중복 시 후보로 노출).
+export const findDocumentsByField = (
+  snapshot: MockSnapshot,
+  databaseName: string,
+  collectionName: string,
+  key: string,
+  value: JsonValue,
+): DocumentLocation[] => {
+  const collection = snapshot.databases[databaseName]?.collections[collectionName];
+  if (!collection) {
+    return [];
+  }
+
+  const matches: DocumentLocation[] = [];
+  for (let documentIndex = 0; documentIndex < collection.documents.length; documentIndex += 1) {
+    const document = collection.documents[documentIndex];
+    const candidate = key === '_id' ? getDocumentId(document, collection.primaryKey, documentIndex) : document[key];
+    if (candidate === value) {
+      matches.push({ databaseName, collectionName, collection, documentIndex, document });
+    }
+  }
+
+  return matches;
+};
 
 const previewValue = (value: JsonValue): JsonValue => {
   if (value === null) {

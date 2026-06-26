@@ -1,20 +1,24 @@
 import { useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { nextPathId } from '../../../hooks/useExplorerState';
-import { Link, Hash, ToggleLeft, KeyRound, ChevronRight } from 'lucide-react';
+import { Link, Hash, ToggleLeft, KeyRound, ChevronRight, Calendar, Sigma, Binary } from 'lucide-react';
 import { AnimatePresence, m } from 'framer-motion';
 import { SPRING_SNAPPY } from '../../../utils/motionPresets';
 import { cn } from '../../../utils/cn';
 import {
   isBsonObjectId as isBsonOid,
+  isBsonDate,
+  isBsonDecimal128,
+  isBsonLong,
   type ActivePath,
+  type CollectionSummary,
   type Document,
   type JsonValue,
   type MockMutationRequest,
   type NormalActivePath,
   type ReferenceActivePath,
 } from '../../../types/explorer';
-import { getFullDocumentById, getReferenceInfo, type ReferenceInfo } from '../../../services/mockAPI';
+import { getFullDocumentById, getFullDocumentByIdInCollection, getReferenceInfo, getReferenceCandidatesByField, type ReferenceInfo } from '../../../services/mockAPI';
 import { InlineSegmentEditor } from '../../editors/InlineSegmentEditor';
 import { DeleteConfirmModal } from '../../common/DeleteConfirmModal';
 import { AddItemButton } from './AddItemButton';
@@ -22,7 +26,7 @@ import { CopyBtn } from './CopyBtn';
 import { FieldItem } from './FieldItem';
 import { HeaderIcon } from './HeaderIcon';
 import { DropOverlay } from './DropOverlay';
-import { getFieldType, resolveAtPath, getEntries } from '../../../utils/jsonTree';
+import { getFieldType, resolveAtPath, getEntries, hasExtendedTypes } from '../../../utils/jsonTree';
 import { isPathChanged } from '../../../utils/changedPaths';
 import { useFileDrop } from '../../../hooks/useFileDrop';
 
@@ -45,9 +49,12 @@ interface JsonLevelColumnProps {
   activePaths: ActivePath[];
   activeCollectionName: string | null;
   activeDatabaseName: string | null;
+  collections: CollectionSummary[];
   onPushJsonPath: (path: ActivePath) => void;
   onPushReference: (oid: string, fieldKey: string, popIndex?: number) => Promise<void>;
   onNavigateToReference: (oid: string) => Promise<void>;
+  onPushReferenceByField: (database: string, collection: string, key: string, value: JsonValue, fieldKey: string, popIndex?: number) => Promise<void>;
+  onNavigateToReferenceByField: (database: string, collection: string, key: string, value: JsonValue) => Promise<void>;
   onPopToIndex: (index: number) => void;
   onMutate: (op: MockMutationRequest) => Promise<unknown>;
   uniqueOids: Set<string>;
@@ -80,9 +87,12 @@ export function JsonLevelColumn({
   activePaths,
   activeCollectionName,
   activeDatabaseName,
+  collections,
   onPushJsonPath,
   onPushReference,
   onNavigateToReference,
+  onPushReferenceByField,
+  onNavigateToReferenceByField,
   onPopToIndex,
   onMutate,
   uniqueOids,
@@ -102,7 +112,8 @@ export function JsonLevelColumn({
   // 잡아내지 못하고 런타임에서만 드러난다. 그래서 이번 리팩토링에서는
   // 순수 유틸(jsonTree.ts)과 이미 독립적인 서브컴포넌트(CopyBtn/FieldItem/
   // HeaderIcon)만 분리하고, 이 블록은 파일 경계를 넘기지 않았다.
-  const refOid     = path.kind === 'reference' ? path.refOid     : null;
+  const refOid     = path.kind === 'reference' && path.ref.kind === 'oid' ? path.ref.oid : null;
+  const refField   = path.kind === 'reference' && path.ref.kind === 'field' ? path.ref : null;
   const chainColor = path.kind === 'reference' ? path.chainColor : undefined;
   const chainIndex = path.kind === 'reference' ? path.chainIndex : 0;
   const projectionPath: string[] = path.kind === 'normal'
@@ -139,10 +150,42 @@ export function JsonLevelColumn({
     getReferenceInfo(refOid).then(setRefInfo).catch(() => setRefInfo(null));
   }, [refOid]);
 
-  const displayDoc = refOid ? refFullDoc : openDocument;
+  // 필드 기반 참조(FK) 컬럼 — push 시점에 이미 key:'_id'/documentId로 고정해뒀으므로
+  // (resolveReferenceCandidate 참고) 여기서는 모호함 없이 컬렉션-scoped로 바로 가져온다
+  const [refFieldFullDoc, setRefFieldFullDoc] = useState<Document | null>(null);
+  useEffect(() => {
+    if (!refField) { setRefFieldFullDoc(null); return; }
+    setRefFieldFullDoc(null);
+    getFullDocumentByIdInCollection(refField.database, refField.collection, String(refField.value)).then(setRefFieldFullDoc).catch(() => setRefFieldFullDoc(null));
+  }, [refField?.database, refField?.collection, refField?.value]);
+
+  const refreshRefFieldDocument = useCallback(() => {
+    if (!refField) return;
+    getFullDocumentByIdInCollection(refField.database, refField.collection, String(refField.value)).then(setRefFieldFullDoc).catch(() => setRefFieldFullDoc(null));
+  }, [refField?.database, refField?.collection, refField?.value]);
+
+  const [refFieldInfo, setRefFieldInfo] = useState<{ collectionLabel: string; documentTitle: string } | null>(null);
+  useEffect(() => {
+    if (!refField) { setRefFieldInfo(null); return; }
+    setRefFieldInfo(null);
+    getReferenceCandidatesByField(refField.database, refField.collection, refField.key, refField.value).then((candidates) => {
+      const candidate = candidates[0];
+      if (!candidate) { setRefFieldInfo(null); return; }
+      const collectionLabel = collections.find((c) => c.name === refField.collection)?.label ?? refField.collection;
+      setRefFieldInfo({ collectionLabel, documentTitle: candidate.documentTitle });
+    }).catch(() => setRefFieldInfo(null));
+  }, [refField?.database, refField?.collection, refField?.key, refField?.value, collections]);
+
+  const displayDoc = refOid ? refFullDoc : refField ? refFieldFullDoc : openDocument;
 
   const currentNode: JsonValue = displayDoc ? resolveAtPath(displayDoc, projectionPath) : null;
   const entries = getEntries(currentNode);
+
+  // EJSON 모드(Date/Decimal128/Long 필드 추가 가능 여부) — 이 컬럼이 마운트될 때 현재
+  // 노드 하위에 그런 필드가 이미 있으면 자동으로 켜진 상태로 시작하고, 이후엔 헤더의
+  // 토글로 수동 전환한다. mutation으로 currentNode 참조가 바뀌어도 다시 계산하지
+  // 않는다 — 그러면 막 켠 토글이 첫 필드를 추가하기도 전에 꺼져버린다.
+  const [ejsonMode, setEjsonMode] = useState(() => hasExtendedTypes(currentNode));
 
   // 노드를 옮길 때마다 "더 보기" 상태 초기화
   const [showAllEntries, setShowAllEntries] = useState(false);
@@ -164,7 +207,7 @@ export function JsonLevelColumn({
     const isSamePath =
       nextActivePath &&
       JSON.stringify(nextActivePath.projectionPath) === JSON.stringify(nextProj) &&
-      (refOid ? nextActivePath.kind === 'reference' : nextActivePath.kind === 'normal');
+      ((refOid || refField) ? nextActivePath.kind === 'reference' : nextActivePath.kind === 'normal');
     // 같은 경로일때는 뭐 없음
     if (isSamePath) {
       console.log('같은 경로라서 아무것도 안 함', nextProj);
@@ -181,12 +224,12 @@ export function JsonLevelColumn({
     // 기본값: 누른 위치까지 자르기
     onPopToIndex(myIndex);
 
-    if (refOid) {
+    if (refOid || refField) {
       const child: ReferenceActivePath = {
         kind: 'reference',
         columnKind: 'json',
         label: key,
-        refOid,
+        ref: refOid ? { kind: 'oid', oid: refOid } : refField!,
         projectionPath: nextProj,
         chainColor: chainColor ?? '#f59e0b',
         chainIndex,
@@ -205,24 +248,28 @@ export function JsonLevelColumn({
       };
       onPushJsonPath(child);
     }
-  }, [activePaths, slotIndex, isInlineChain, path, refOid, chainColor, chainIndex, projectionPath, onPopToIndex, onPushJsonPath]);
+  }, [activePaths, slotIndex, isInlineChain, path, refOid, refField, chainColor, chainIndex, projectionPath, onPopToIndex, onPushJsonPath]);
 
   const [deleteTarget, setDeleteTarget] = useState<{ fieldKey: string; value: JsonValue } | null>(null);
 
-  const docOidForMutate = refOid
-    ? (displayDoc?._id?.$oid ?? '')
-    : (path.kind === 'normal' ? (openDocument?._id?.$oid ?? '') : '');
+  // 문서를 열 때 이미 알고 있던 id를 그대로 재사용한다(문서 내용에서 다시 derive하지
+  // 않음) — _id/PK가 둘 다 없는 plain 문서는 컬렉션 안 배열 인덱스로만 식별되는데,
+  // 그 인덱스는 여길 열 때 이미 확정돼 있었고 이 컬럼이 열려있는 동안은 그대로 유효하다
+  const docOidForMutate = refOid ? refOid : refField ? String(refField.value) : (path.kind === 'normal' ? (path.documentOid ?? '') : '');
 
-  // REF 컬럼(refOid가 있는 경우)은 "현재 선택된 컬렉션/DB"가 아니라 참조 대상
+  // REF 컬럼(refOid/refField가 있는 경우)은 "현재 선택된 컬렉션/DB"가 아니라 참조 대상
   // 문서가 실제로 속한 컬렉션/DB로 mutate해야 한다. activeDatabaseName/
   // activeCollectionName 그대로 쓰면 참조 대상이 다른 컬렉션(혹은 다른 DB)에
   // 있을 때 거기서 docOidForMutate를 찾지 못해 "Document not found"가 뜬다.
-  // refInfo는 getReferenceInfo(refOid)로 이미 가져온 참조 대상의 실제 위치.
-  const mutateDatabaseName = refOid ? (refInfo?.databaseName ?? null) : activeDatabaseName;
-  const mutateCollectionName = refOid ? (refInfo?.collectionName ?? null) : activeCollectionName;
+  // refInfo/refFieldInfo는 이미 가져온 참조 대상의 실제 위치.
+  const mutateDatabaseName = refOid ? (refInfo?.databaseName ?? null) : refField ? refField.database : activeDatabaseName;
+  const mutateCollectionName = refOid ? (refInfo?.collectionName ?? null) : refField ? refField.collection : activeCollectionName;
+  // 이 컬럼이 보여주는 컬렉션에 선언된 필드 기반 참조(FK) 설정 — string/number 필드에 LINK 배지를 띄울지 결정
+  const referenceFields = collections.find((c) => c.name === mutateCollectionName)?.referenceFields ?? {};
 
   const isObjectNode = currentNode !== null && typeof currentNode === 'object' &&
-    !Array.isArray(currentNode) && !isBsonOid(currentNode);
+    !Array.isArray(currentNode) && !isBsonOid(currentNode) &&
+    !isBsonDate(currentNode) && !isBsonDecimal128(currentNode) && !isBsonLong(currentNode);
   const isArrayNode = Array.isArray(currentNode);
   const canAddField = !!displayDoc && (isObjectNode || isArrayNode);
   // path.comp.id를 포함해야 한다 — 그렇지 않으면 동일한 projectionPath를 가진
@@ -317,16 +364,22 @@ export function JsonLevelColumn({
     const isExpandable = type === 'object' || type === 'array';
     // _id가 아닌 단일 {$oid} 필드는, 이 앱이 직접 만든 '고유 oid' 레지스트리에 없으면 DBRef(참조)로 간주
     const isOidRef = type === 'oid' && !isId && !uniqueOids.has((value as { $oid: string }).$oid);
+    // 이 컬렉션에 FK로 선언된 필드 — plain string/number 값으로 다른 컬렉션 문서를 가리킴
+    const fieldRefConfig = !isId ? referenceFields[fieldKey] : undefined;
+    const isFieldRef = !!fieldRefConfig && (type === 'string' || type === 'number');
     // _id만 수정 불가, REF로 분류된 oid도 키 이름/참조 대상을 수정할 수 있어야 함
     const isEditable = !isId;
     const isContainer = type === 'object' || type === 'array';
     // 이 필드를 펼쳐서 다음 컬럼이 열려있는 중인지 — handlePushChild/onPushReference가
-    // 만드는 다음 ActivePath와 같은 모양인지로 판별한다(클릭 핸들러와 동일한 비교 기준)
+    // 만드는 다음 ActivePath와 같은 모양인지로 판별한다(클릭 핸들러와 동일한 비교 기준).
+    // isFieldRef는 클릭 시점에야 비동기로 실제 문서를 찾기 때문에 라벨(fieldKey) 일치로
+    // 근사 비교한다 — oid처럼 동기 비교는 불가능하지만 활성 표시는 정확도가 중요하지 않음
     const isActive = !nextActivePath ? false
-      : isOidRef ? (nextActivePath.kind === 'reference' && nextActivePath.refOid === (value as { $oid: string }).$oid)
+      : isOidRef ? (nextActivePath.kind === 'reference' && nextActivePath.ref.kind === 'oid' && nextActivePath.ref.oid === (value as { $oid: string }).$oid)
+      : isFieldRef ? (nextActivePath.kind === 'reference' && nextActivePath.ref.kind === 'field' && nextActivePath.label === fieldKey)
       : isExpandable ? (
           JSON.stringify(nextActivePath.projectionPath) === JSON.stringify([...projectionPath, fieldKey]) &&
-          (refOid ? nextActivePath.kind === 'reference' : nextActivePath.kind === 'normal')
+          ((refOid || refField) ? nextActivePath.kind === 'reference' : nextActivePath.kind === 'normal')
         )
       : false;
 
@@ -342,13 +395,19 @@ export function JsonLevelColumn({
             : type === 'object' ? 'Object'
             : type === 'number' ? 'Number'
             : type === 'boolean' ? 'Boolean'
+            : type === 'null' ? 'Null'
             : type === 'oid' ? 'ObjectID'
+            : type === 'date' ? 'Date'
+            : type === 'decimal128' ? 'Decimal128'
+            : type === 'long' ? 'Long'
             : 'String'
           }
           initialValue={value}
           siblingKeys={entries.map((e) => e.key).filter((k) => k !== fieldKey)}
           activeDatabaseName={mutateDatabaseName}
           currentRefInfo={editingRefInfo}
+          referenceFieldConfig={fieldRefConfig}
+          ejsonMode={ejsonMode}
           onSubmit={async (data) => {
             if (!mutateCollectionName || !mutateDatabaseName) return;
             await onMutate({
@@ -383,6 +442,7 @@ export function JsonLevelColumn({
               if (data.objectIdMode === 'generate') onRegisterUniqueOid(nextValue.$oid);
             }
             refreshRefDocument();
+            refreshRefFieldDocument();
             onSetEditingId(null);
           }}
           onCancel={() => onSetEditingId(null)}
@@ -392,6 +452,19 @@ export function JsonLevelColumn({
     }
 
     const valueContent = (() => {
+      if (isFieldRef) {
+        return (
+          <>
+            <span className="flex items-center justify-center gap-1 text-[11px] font-mono pl-1.5 pr-2 py-0.5 rounded-lg bg-cyan-50 text-cyan-600 font-semibold shrink-0">
+              <Link size={11} className="text-cyan-400 shrink-0" />
+              LINK
+            </span>
+            <span className="text-[12px] font-mono text-cyan-700 truncate" title={`${fieldRefConfig!.targetCollection}.${fieldRefConfig!.targetKey} = ${String(value)}`}>
+              {type === 'string' ? `"${String(value)}"` : String(value)}
+            </span>
+          </>
+        );
+      }
       switch (type) {
         case 'string':
           return <span className="text-sm font-mono text-emerald-600 truncate">&ldquo;{String(value)}&rdquo;</span>;
@@ -414,7 +487,7 @@ export function JsonLevelColumn({
         case 'object':
           return (
             <span className="text-[11px] font-mono px-2 py-0.5 rounded-lg bg-slate-100 text-slate-400 font-medium">
-              &#123; object &#125;
+              &#123; {Object.keys(value as Record<string, unknown>).length} &#125;
             </span>
           );
         case 'array':
@@ -452,20 +525,67 @@ export function JsonLevelColumn({
             </>
           );
         }
+        case 'date': {
+          const date = (value as { $date: string }).$date;
+          return (
+            <>
+              <span className="flex items-center justify-center gap-1 text-[11px] font-mono pl-1.5 pr-2 py-0.5 rounded-lg bg-rose-50 text-rose-600 font-semibold shrink-0">
+                <Calendar size={11} className="text-rose-400 shrink-0" />
+                DATE
+              </span>
+              <span className="text-[12px] font-mono text-rose-700 truncate" title={date}>
+                {date}
+              </span>
+            </>
+          );
+        }
+        case 'decimal128': {
+          const dec = (value as { $numberDecimal: string }).$numberDecimal;
+          return (
+            <>
+              <span className="flex items-center justify-center gap-1 text-[11px] font-mono pl-1.5 pr-2 py-0.5 rounded-lg bg-teal-50 text-teal-600 font-semibold shrink-0">
+                <Sigma size={11} className="text-teal-400 shrink-0" />
+                DEC128
+              </span>
+              <span className="text-[12px] font-mono text-teal-700 truncate" title={dec}>
+                {dec}
+              </span>
+            </>
+          );
+        }
+        case 'long': {
+          const long = (value as { $numberLong: string }).$numberLong;
+          return (
+            <>
+              <span className="flex items-center justify-center gap-1 text-[11px] font-mono pl-1.5 pr-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-600 font-semibold shrink-0">
+                <Binary size={11} className="text-indigo-400 shrink-0" />
+                LONG
+              </span>
+              <span className="text-[12px] font-mono text-indigo-700 truncate" title={long}>
+                {long}
+              </span>
+            </>
+          );
+        }
       }
     })();
 
     // expandable/ref → 탐색 (ref는 중복 방지), 비확장 + hasPathsAfter → pop
     const handleClick: (() => void) | null = (() => {
-      if (isExpandable || isOidRef) {
+      if (isExpandable || isOidRef || isFieldRef) {
         return () => {
           const refOidToPush = isOidRef ? (value as { $oid: string }).$oid : null;
 
           if (refOidToPush) {
             const next = activePaths[myIndex + 1];
-            if (next?.kind === 'reference' && (next as ReferenceActivePath).refOid === refOidToPush) return;
+            if (next?.kind === 'reference' && next.ref.kind === 'oid' && next.ref.oid === refOidToPush) return;
             // 실제로 참조가 존재함이 확인된 후에만 하위 컬럼을 닫음 (오인된 REF 클릭 시 아무 변화 없도록)
             void onPushReference(refOidToPush, fieldKey, myIndex >= 0 ? myIndex : undefined);
+            return;
+          }
+          if (isFieldRef) {
+            // 후보가 여러 개일 수 있어(중복 PK) 미리 dedup하지 않고 항상 다시 조회한다
+            void onPushReferenceByField(mutateDatabaseName ?? '', fieldRefConfig!.targetCollection, fieldRefConfig!.targetKey, value, fieldKey, myIndex >= 0 ? myIndex : undefined);
             return;
           }
           handlePushChild(fieldKey);
@@ -485,7 +605,7 @@ export function JsonLevelColumn({
           <FieldItem
             fieldKey={fieldKey}
             isId={isId}
-            isExpandable={isExpandable || isOidRef}
+            isExpandable={isExpandable || isOidRef || isFieldRef}
             isEditable={isEditable}
             isHighlighted={isHighlighted}
             isActive={isActive}
@@ -517,7 +637,7 @@ export function JsonLevelColumn({
         key={fieldKey}
         fieldKey={fieldKey}
         isId={isId}
-        isExpandable={isExpandable || isOidRef}
+        isExpandable={isExpandable || isOidRef || isFieldRef}
         isEditable={isEditable}
         isHighlighted={isHighlighted}
         isActive={isActive}
@@ -557,12 +677,32 @@ export function JsonLevelColumn({
             type="button"
             className="text-[10px] font-bold px-2 py-0.5 rounded-md text-white shrink-0 tracking-wide truncate max-w-[160px] cursor-pointer hover:opacity-80 transition-opacity"
             style={{ backgroundColor: chainColor }}
-            title={refInfo ? `Go to ${refInfo.collectionLabel}/${refInfo.documentTitle}` : undefined}
-            onClick={() => refOid && void onNavigateToReference(refOid)}
+            title={
+              refInfo ? `Go to ${refInfo.collectionLabel}/${refInfo.documentTitle}`
+              : refFieldInfo ? `Go to ${refFieldInfo.collectionLabel}/${refFieldInfo.documentTitle}`
+              : undefined
+            }
+            onClick={() => {
+              if (refOid) void onNavigateToReference(refOid);
+              else if (refField) void onNavigateToReferenceByField(refField.database, refField.collection, refField.key, refField.value);
+            }}
           >
-            {refInfo ? `${refInfo.collectionLabel}/${refInfo.documentTitle}` : 'REF'}
+            {refInfo ? `${refInfo.collectionLabel}/${refInfo.documentTitle}`
+              : refFieldInfo ? `${refFieldInfo.collectionLabel}/${refFieldInfo.documentTitle}`
+              : 'REF'}
           </button>
         )}
+        <button
+          type="button"
+          className={cn(
+            'text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0 tracking-wide transition-colors',
+            ejsonMode ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400',
+          )}
+          title="Toggle EJSON field types (Date/Decimal128/Long) for Add Field"
+          onClick={() => setEjsonMode((v) => !v)}
+        >
+          EJSON
+        </button>
         <span className="text-xs font-mono text-slate-400 tabular-nums">{entries.length}</span>
       </div>
 
@@ -610,6 +750,7 @@ export function JsonLevelColumn({
               siblingKeys={entries.map((e) => e.key)}
               initialKey={isArrayNode ? String(entries.length) : undefined}
               activeDatabaseName={mutateDatabaseName}
+              ejsonMode={ejsonMode}
               onSubmit={async (data) => {
                 if (!mutateCollectionName || !mutateDatabaseName) return;
                 // array는 key를 현재 length로 고정 (next index)
@@ -632,6 +773,7 @@ export function JsonLevelColumn({
                   onRegisterUniqueOid(data.value.$oid);
                 }
                 refreshRefDocument();
+                refreshRefFieldDocument();
                 onSetEditingId(null);
               }}
               onCancel={() => onSetEditingId(null)}
@@ -671,6 +813,7 @@ export function JsonLevelColumn({
               onUnregisterUniqueOid(deleteTarget.value.$oid);
             }
             refreshRefDocument();
+            refreshRefFieldDocument();
             setDeleteTarget(null);
           }}
           onCancel={() => setDeleteTarget(null)}

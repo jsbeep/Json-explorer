@@ -1,6 +1,7 @@
 import { useMemo, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { MIN_VISIBLE_COLUMNS, type UseExplorerStateResult } from '../../hooks/useExplorerState';
+import type { CollectionSummary, JsonValue } from '../../types/explorer';
 import { CollectionsColumn } from './columns/CollectionsColumn';
 import { DocumentsColumn } from './columns/DocumentsColumn';
 import { CollectionsDocumentsColumn } from './columns/CollectionsDocumentsColumn';
@@ -59,6 +60,8 @@ type MillerColumnsProps = Pick<
   | 'pushJsonPath'
   | 'pushReference'
   | 'navigateToReference'
+  | 'pushReferenceByField'
+  | 'navigateToReferenceByField'
   | 'popToIndex'
   | 'mutate'
   | 'uniqueOids'
@@ -85,6 +88,8 @@ export function MillerColumns({
   pushJsonPath,
   pushReference,
   navigateToReference,
+  pushReferenceByField,
+  navigateToReferenceByField,
   popToIndex,
   mutate,
   uniqueOids,
@@ -253,6 +258,8 @@ export function MillerColumns({
                   pushJsonPath={pushJsonPath}
                   pushReference={pushReference}
                   navigateToReference={navigateToReference}
+                  pushReferenceByField={pushReferenceByField}
+                  navigateToReferenceByField={navigateToReferenceByField}
                   popToIndex={popToIndex}
                   mutate={mutate}
                   uniqueOids={uniqueOids}
@@ -346,10 +353,13 @@ function ColumnContent({ col, visibleLength, slotIndex, jsonChainTail, ...rest }
     activePaths: rest.activePaths,
     activeCollectionName: rest.activeCollectionName,
     activeDatabaseName: rest.activeDatabaseName,
+    collections: rest.collections,
     reduceMotion: rest.reduceMotion,
     onPushJsonPath: rest.pushJsonPath,
     onPushReference: rest.pushReference,
     onNavigateToReference: rest.navigateToReference,
+    onPushReferenceByField: rest.pushReferenceByField,
+    onNavigateToReferenceByField: rest.navigateToReferenceByField,
     onPopToIndex: rest.popToIndex,
     onMutate: rest.mutate,
     uniqueOids: rest.uniqueOids,
@@ -370,10 +380,13 @@ function ColumnContent({ col, visibleLength, slotIndex, jsonChainTail, ...rest }
       activePaths={rest.activePaths}
       activeCollectionName={rest.activeCollectionName}
       activeDatabaseName={rest.activeDatabaseName}
+      collections={rest.collections}
       reduceMotion={rest.reduceMotion}
       onPushJsonPath={rest.pushJsonPath}
       onPushReference={rest.pushReference}
       onNavigateToReference={rest.navigateToReference}
+      onPushReferenceByField={rest.pushReferenceByField}
+      onNavigateToReferenceByField={rest.navigateToReferenceByField}
       onPopToIndex={rest.popToIndex}
       onMutate={rest.mutate}
       uniqueOids={rest.uniqueOids}
@@ -399,10 +412,13 @@ interface JsonChainSharedProps {
   activePaths: ActivePath[];
   activeCollectionName: string | null;
   activeDatabaseName: string | null;
+  collections: CollectionSummary[];
   reduceMotion: boolean;
   onPushJsonPath: (path: ActivePath) => void;
   onPushReference: (oid: string, fieldKey: string, popIndex?: number) => Promise<void>;
   onNavigateToReference: (oid: string) => Promise<void>;
+  onPushReferenceByField: (database: string, collection: string, key: string, value: JsonValue, fieldKey: string, popIndex?: number) => Promise<void>;
+  onNavigateToReferenceByField: (database: string, collection: string, key: string, value: JsonValue) => Promise<void>;
   onPopToIndex: (index: number) => void;
   onMutate: (op: MockMutationRequest) => Promise<unknown>;
   uniqueOids: Set<string>;
@@ -435,10 +451,13 @@ function buildJsonChain(
       activePaths={shared.activePaths}
       activeCollectionName={shared.activeCollectionName}
       activeDatabaseName={shared.activeDatabaseName}
+      collections={shared.collections}
       reduceMotion={shared.reduceMotion}
       onPushJsonPath={shared.onPushJsonPath}
       onPushReference={shared.onPushReference}
       onNavigateToReference={shared.onNavigateToReference}
+      onPushReferenceByField={shared.onPushReferenceByField}
+      onNavigateToReferenceByField={shared.onNavigateToReferenceByField}
       onPopToIndex={shared.onPopToIndex}
       onMutate={shared.onMutate}
       uniqueOids={shared.uniqueOids}

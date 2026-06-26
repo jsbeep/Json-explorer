@@ -4,8 +4,11 @@ import {
   getCollections,
   getDocumentById,
   getFullDocumentById,
+  getFullDocumentByIdInCollection,
   getDocuments,
   getReferenceInfo,
+  getReferenceCandidatesByField,
+  type FieldReferenceCandidate,
   listDatabases,
   mutateData,
   checkReference,
@@ -22,6 +25,7 @@ import type {
   Document,
   DocumentSummary,
   ExplorerPathSegment,
+  JsonValue,
   MockMutationRequest,
   MockMutationResult,
   MockSnapshot,
@@ -41,6 +45,15 @@ export const MAX_VISIBLE_COLUMNS = 6;
 let pathIdCounter = 0;
 export const nextPathId = () => ++pathIdCounter;
 
+// 필드 기반 참조(FK)가 같은 컬렉션 안에서 PK 값 중복으로 후보가 여러 개일 때 —
+// 조용히 하나를 골라 잘못 연결하지 않고 사용자에게 보여주고 고르게 한다.
+export interface PendingFieldReference {
+  candidates: FieldReferenceCandidate[];
+  mode: 'push' | 'navigate';
+  fieldKey?: string;
+  popIndex?: number;
+}
+
 // ── UseExplorerStateResult 타입 (Header 등 외부 컴포넌트에서 Pick 가능) ────────
 
 export interface UseExplorerStateResult {
@@ -57,6 +70,7 @@ export interface UseExplorerStateResult {
   changedPaths: string[];
   toast: ToastMessage | null;
   uniqueOids: Set<string>;
+  referenceCandidates: PendingFieldReference | null;
 
   // 파생값
   visibleColumns: (ActivePath | null)[];
@@ -73,6 +87,10 @@ export interface UseExplorerStateResult {
   popToIndex: (index: number) => void;
   pushReference: (oid: string, fieldKey: string, popIndex?: number) => Promise<void>;
   navigateToReference: (oid: string) => Promise<void>;
+  pushReferenceByField: (database: string, collection: string, key: string, value: JsonValue, fieldKey: string, popIndex?: number) => Promise<void>;
+  navigateToReferenceByField: (database: string, collection: string, key: string, value: JsonValue) => Promise<void>;
+  resolveReferenceCandidate: (candidate: FieldReferenceCandidate) => Promise<void>;
+  dismissReferenceCandidates: () => void;
   mutate: (op: MockMutationRequest) => Promise<MockMutationResult>;
   registerUniqueOid: (oid: string) => void;
   unregisterUniqueOid: (oid: string) => void;
@@ -97,6 +115,7 @@ export function useExplorerState(): UseExplorerStateResult {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [changedPaths, setChangedPaths] = useState<string[]>([]);
+  const [referenceCandidates, setReferenceCandidates] = useState<PendingFieldReference | null>(null);
   const [maxVisibleColumns, setMaxVisibleColumnsState] = useState(MIN_VISIBLE_COLUMNS + 1);
 
   const setMaxVisibleColumns = useCallback((count: number) => {
@@ -268,7 +287,9 @@ export function useExplorerState(): UseExplorerStateResult {
     }
     setIsLoading(true);
     try {
-      const doc = await getFullDocumentById(oid); // 전체 문서 — 로컬 JSON 탐색용
+      // 전체 문서 — 로컬 JSON 탐색용. 이미 컬렉션이 정해져 있으므로 oid 전역 검색 대신
+      // 컬렉션-scoped 조회를 쓴다 (plain _id 문서도 열 수 있도록)
+      const doc = await getFullDocumentByIdInCollection(activeDatabaseRef.current ?? '', activeCollectionRef.current ?? '', oid);
       activeDocumentOidRef.current = oid;
       setOpenDocument(doc);
       setActivePaths((prev) => {
@@ -319,7 +340,7 @@ export function useExplorerState(): UseExplorerStateResult {
           kind: 'reference',
           columnKind: 'json',
           label: fieldKey,
-          refOid: oid,
+          ref: { kind: 'oid', oid },
           projectionPath: [],
           chainColor,
           chainIndex,
@@ -394,6 +415,134 @@ export function useExplorerState(): UseExplorerStateResult {
     }
   }, [showToast]);
 
+  // ── 필드 기반 참조(FK) — oid 경로(pushReference/navigateToReference)와 병행하는 별도 경로.
+  // 후보가 하나면 즉시 진행하고, 여러 개면(같은 컬렉션 안의 중복 PK 값) referenceCandidates에
+  // 채워 사용자가 고르게 한다 — 조용히 하나를 골라 잘못 연결하지 않도록.
+
+  const finalizePushFieldReference = useCallback((candidate: FieldReferenceCandidate, fieldKey: string, popIndex?: number) => {
+    setActivePaths((prev) => {
+      const base = popIndex !== undefined ? prev.slice(0, popIndex + 1) : prev;
+      const chainIndex = base.filter((p) => p.kind === 'reference').length;
+      const chainColor = CHAIN_COLORS[chainIndex % CHAIN_COLORS.length];
+      const refPath: ReferenceActivePath = {
+        kind: 'reference',
+        columnKind: 'json',
+        label: fieldKey,
+        // key를 '_id'/documentId로 고정 — 다시 렌더/refetch될 때마다 원래의 모호한
+        // key/value 매칭을 재생하지 않고 이미 골라낸 문서를 그대로 가리키게 한다
+        ref: { kind: 'field', database: candidate.database, collection: candidate.collection, key: '_id', value: candidate.documentId },
+        projectionPath: [],
+        chainColor,
+        chainIndex,
+        comp: { id: nextPathId(), direction: 1 },
+      };
+      return [...base, refPath];
+    });
+    setEditingId(null);
+  }, []);
+
+  const finalizeNavigateFieldReference = useCallback(async (candidate: FieldReferenceCandidate) => {
+    const [cols, docs, doc] = await Promise.all([
+      getCollections(candidate.database),
+      getDocuments(candidate.collection),
+      getFullDocumentByIdInCollection(candidate.database, candidate.collection, candidate.documentId),
+    ]);
+
+    activeDatabaseRef.current = candidate.database;
+    activeCollectionRef.current = candidate.collection;
+    activeDocumentOidRef.current = candidate.documentId;
+
+    setActiveDatabase(candidate.database);
+    setCollections(cols);
+    setDocuments(docs);
+    setOpenDocument(doc);
+    setActivePaths([
+      {
+        kind: 'normal',
+        columnKind: 'collections',
+        label: candidate.database,
+        databaseName: candidate.database,
+        comp: { id: nextPathId(), direction: 1 },
+      },
+      {
+        kind: 'normal',
+        columnKind: 'documents',
+        label: candidate.collection,
+        collectionName: candidate.collection,
+        comp: { id: nextPathId(), direction: 1 },
+      },
+      {
+        kind: 'normal',
+        columnKind: 'json',
+        label: candidate.documentTitle,
+        documentOid: candidate.documentId,
+        projectionPath: [],
+        comp: { id: nextPathId(), direction: 1 },
+      },
+    ]);
+    setEditingId(null);
+  }, []);
+
+  const pushReferenceByField = useCallback(async (
+    database: string, collection: string, key: string, value: JsonValue, fieldKey: string, popIndex?: number,
+  ) => {
+    setIsLoading(true);
+    try {
+      const candidates = await getReferenceCandidatesByField(database, collection, key, value);
+      // 참조가 실제로 존재하지 않으면 아무 것도 하지 않음 (oid 경로의 pushReference와 동일한 침묵 동작)
+      if (candidates.length === 0) return;
+      if (candidates.length === 1) {
+        finalizePushFieldReference(candidates[0], fieldKey, popIndex);
+        return;
+      }
+      setReferenceCandidates({ candidates, mode: 'push', fieldKey, popIndex });
+    } catch {
+      showToast('Could not load reference.', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [showToast, finalizePushFieldReference]);
+
+  const navigateToReferenceByField = useCallback(async (database: string, collection: string, key: string, value: JsonValue) => {
+    setIsLoading(true);
+    try {
+      const candidates = await getReferenceCandidatesByField(database, collection, key, value);
+      if (candidates.length === 0) {
+        showToast('Could not find the referenced document.', 'error');
+        return;
+      }
+      if (candidates.length === 1) {
+        await finalizeNavigateFieldReference(candidates[0]);
+        return;
+      }
+      setReferenceCandidates({ candidates, mode: 'navigate' });
+    } catch {
+      showToast('Failed to navigate.', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [showToast, finalizeNavigateFieldReference]);
+
+  const resolveReferenceCandidate = useCallback(async (candidate: FieldReferenceCandidate) => {
+    const pending = referenceCandidates;
+    setReferenceCandidates(null);
+    if (!pending) return;
+    if (pending.mode === 'push') {
+      finalizePushFieldReference(candidate, pending.fieldKey ?? '', pending.popIndex);
+      return;
+    }
+    setIsLoading(true);
+    try {
+      await finalizeNavigateFieldReference(candidate);
+    } catch {
+      showToast('Failed to navigate.', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [referenceCandidates, finalizePushFieldReference, finalizeNavigateFieldReference, showToast]);
+
+  const dismissReferenceCandidates = useCallback(() => setReferenceCandidates(null), []);
+
   const mutate = useCallback(async (op: MockMutationRequest): Promise<MockMutationResult> => {
     undoSnapshotRef.current = getSnapshot();
     setIsLoading(true);
@@ -424,13 +573,13 @@ export function useExplorerState(): UseExplorerStateResult {
         }
         // 열린 문서 갱신
         if (activeDocumentOidRef.current && op.type === 'mutateField') {
-          const doc = await getFullDocumentById(activeDocumentOidRef.current);
+          const doc = await getFullDocumentByIdInCollection(activeDatabaseRef.current ?? '', activeCollectionRef.current ?? '', activeDocumentOidRef.current);
           setOpenDocument(doc);
         }
       }
       // 컬렉션 메타데이터(이름/타이틀 키 등) 변경 시 collections 캐시도 갱신
       if (
-        (op.type === 'createCollection' || op.type === 'renameCollection' || op.type === 'setCollectionTitleKey' || op.type === 'deleteCollection' || op.type === 'duplicateCollection') &&
+        (op.type === 'createCollection' || op.type === 'renameCollection' || op.type === 'setCollectionTitleKey' || op.type === 'setCollectionPrimaryKey' || op.type === 'setCollectionReferenceField' || op.type === 'deleteCollection' || op.type === 'duplicateCollection') &&
         op.database === activeDatabaseRef.current
       ) {
         const cols = await getCollections(op.database);
@@ -552,7 +701,7 @@ export function useExplorerState(): UseExplorerStateResult {
         const docs = await getDocuments(activeCollectionRef.current);
         setDocuments(docs);
         if (activeDocumentOidRef.current) {
-          const doc = await getFullDocumentById(activeDocumentOidRef.current);
+          const doc = await getFullDocumentByIdInCollection(activeDatabaseRef.current, activeCollectionRef.current, activeDocumentOidRef.current);
           setOpenDocument(doc);
         }
       }
@@ -585,6 +734,7 @@ export function useExplorerState(): UseExplorerStateResult {
     changedPaths,
     toast,
     uniqueOids,
+    referenceCandidates,
     visibleColumns,
     breadcrumbs,
     maxVisibleColumns,
@@ -597,6 +747,10 @@ export function useExplorerState(): UseExplorerStateResult {
     popToIndex,
     pushReference,
     navigateToReference,
+    pushReferenceByField,
+    navigateToReferenceByField,
+    resolveReferenceCandidate,
+    dismissReferenceCandidates,
     mutate,
     registerUniqueOid,
     unregisterUniqueOid,

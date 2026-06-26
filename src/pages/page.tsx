@@ -6,6 +6,7 @@ import { LandingIntro } from '../components/layout/LandingIntro';
 import { Footer } from '../components/layout/Footer';
 import { Breadcrumbs } from '../components/dashboard/Breadcrumbs';
 import { MillerColumns } from '../components/dashboard/MillerColumns';
+import { ReferenceCandidatesModal } from '../components/common/ReferenceCandidatesModal';
 import { SPRING_SOFT } from '../utils/motionPresets';
 
 // ── 스타일 ────────────────────────────────────────────────────────────────────
@@ -44,6 +45,7 @@ export default function ExplorerPage() {
     editingId,
     toast,
     uniqueOids,
+    referenceCandidates,
     visibleColumns,
     breadcrumbs,
     maxVisibleColumns,
@@ -55,6 +57,10 @@ export default function ExplorerPage() {
     popToIndex,
     pushReference,
     navigateToReference,
+    pushReferenceByField,
+    navigateToReferenceByField,
+    resolveReferenceCandidate,
+    dismissReferenceCandidates,
     mutate,
     registerUniqueOid,
     unregisterUniqueOid,
@@ -102,6 +108,8 @@ export default function ExplorerPage() {
             pushJsonPath={pushJsonPath}
             pushReference={pushReference}
             navigateToReference={navigateToReference}
+            pushReferenceByField={pushReferenceByField}
+            navigateToReferenceByField={navigateToReferenceByField}
             popToIndex={popToIndex}
             mutate={mutate}
             uniqueOids={uniqueOids}
@@ -112,6 +120,13 @@ export default function ExplorerPage() {
           />
         </div>
       </div>
+
+      {/* 필드 기반 참조(FK) 매칭이 여러 개일 때 고르는 모달 */}
+      <ReferenceCandidatesModal
+        pending={referenceCandidates}
+        onSelect={(candidate) => void resolveReferenceCandidate(candidate)}
+        onCancel={dismissReferenceCandidates}
+      />
 
       {/* 스크롤 시 노출되는 소개 섹션 — X로 닫으면 Footer까지 함께 사라지고 explorer 패널만 남는다 */}
       {showIntro && (

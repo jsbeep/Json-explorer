@@ -1,16 +1,18 @@
 import { useState, useRef, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Check, X, Trash2, ChevronRight, ToggleLeft, Hash, Type, Braces, List, Link, KeyRound, Zap, RefreshCw, ClipboardPaste, Upload, CopyPlus, Download, ClipboardCopy } from 'lucide-react';
+import { Check, X, Trash2, ChevronRight, ToggleLeft, Hash, Type, Braces, List, Link, KeyRound, Zap, RefreshCw, ClipboardPaste, Upload, CopyPlus, Download, ClipboardCopy, CircleSlash, Calendar, Sigma, Binary } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { SPRING_SHARP } from '../../utils/motionPresets';
 import type { JsonValue } from '../../types/explorer';
-import { getCollections, getDocuments, type ReferenceInfo } from '../../services/mockAPI';
+import { getCollections, getDocuments, getFieldValueCandidates, type ReferenceInfo } from '../../services/mockAPI';
 import { generateObjectId } from '../../utils/objectId';
 import { copyToClipboard } from '../../utils/clipboard';
 
 // ── 타입 정의 ─────────────────────────────────────────────────────────────────
 
-type FieldType = 'String' | 'Number' | 'Boolean' | 'Object' | 'Array' | 'ObjectID';
+type FieldType =
+  | 'String' | 'Number' | 'Boolean' | 'Null' | 'Object' | 'Array' | 'ObjectID'
+  | 'Date' | 'Decimal128' | 'Long';
 
 interface TypeMeta {
   label: string;
@@ -21,15 +23,30 @@ const TYPE_META: Record<FieldType, TypeMeta> = {
   String: { label: 'String', icon: <Type size={12} /> },
   Number: { label: 'Number', icon: <Hash size={12} /> },
   Boolean: { label: 'Boolean', icon: <ToggleLeft size={12} /> },
+  Null: { label: 'Null', icon: <CircleSlash size={12} /> },
   Object: { label: 'Object', icon: <Braces size={12} /> },
   Array: { label: 'Array', icon: <List size={12} /> },
   ObjectID: { label: 'ObjectID', icon: <KeyRound size={12} /> },
+  Date: { label: 'Date', icon: <Calendar size={12} /> },
+  Decimal128: { label: 'Decimal128', icon: <Sigma size={12} /> },
+  Long: { label: 'Long', icon: <Binary size={12} /> },
 };
 
-const ALL_TYPES: FieldType[] = ['String', 'Number', 'Boolean', 'Object', 'Array', 'ObjectID'];
+// JSON 네이티브 6타입 + ObjectID(이 앱 참조 시스템 핵심이라 EJSON 모드와 무관하게 항상 노출)
+const JSON_TYPES: FieldType[] = ['String', 'Number', 'Boolean', 'Null', 'Object', 'Array', 'ObjectID'];
+// EJSON 모드일 때(또는 edit 시 항상)만 추가로 노출하는 BSON 확장 타입
+const EJSON_EXTRA_TYPES: FieldType[] = ['Date', 'Decimal128', 'Long'];
 
 const isInvalidJson = (text: string): boolean => {
   try { JSON.parse(text); return false; } catch { return true; }
+};
+
+// "YYYY-MM-DDTHH:mm" (datetime-local input 형식)로 변환 — 실패 시 빈 문자열
+const isoToLocalInput = (iso: string): string => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -52,6 +69,11 @@ interface InlineSegmentEditorProps {
   siblingKeys: string[];
   activeDatabaseName?: string | null;
   currentRefInfo?: ReferenceInfo | null;
+  // 이 필드가 컬렉션 설정(referenceFields)에 FK로 선언돼 있으면 — 선언 자체는 여기서
+  // 바꾸지 않고(ReferenceFieldsManager 전용), 값 입력만 타겟의 후보값으로 보조한다
+  referenceFieldConfig?: { targetCollection: string; targetKey: string } | null;
+  // true면 Date/Decimal128/Long 같은 BSON 확장 타입도 Add 시 타입 선택지에 노출 (edit 시엔 항상 노출)
+  ejsonMode?: boolean;
   // edit 모드(collection/document)에서 Export 시 내보낼 전체 JSON을 비동기로 가져옴
   onExportRequest?: () => Promise<JsonValue>;
   // 부모 컬럼 전체에 파일을 드래그&드롭했을 때 전달되는 파일 — 마운트된 이 에디터의
@@ -118,6 +140,8 @@ export function InlineSegmentEditor({
   siblingKeys,
   activeDatabaseName,
   currentRefInfo,
+  referenceFieldConfig,
+  ejsonMode = false,
   onExportRequest,
   pendingImportFile,
   onPendingImportFileConsumed,
@@ -134,11 +158,21 @@ export function InlineSegmentEditor({
     if (typeof initialValue === 'boolean') return String(initialValue);
     if (typeof initialValue === 'string') return initialValue;
     if (typeof initialValue === 'number') return String(initialValue);
+    if (initialValue && typeof initialValue === 'object' && !Array.isArray(initialValue)) {
+      if ('$numberDecimal' in initialValue) return String((initialValue as { $numberDecimal: string }).$numberDecimal);
+      if ('$numberLong' in initialValue) return String((initialValue as { $numberLong: string }).$numberLong);
+    }
     return JSON.stringify(initialValue, null, 2);
   });
   const [boolValue, setBoolValue] = useState(
     typeof initialValue === 'boolean' ? initialValue : false,
   );
+  const [dateValue, setDateValue] = useState(() => {
+    if (initialValue && typeof initialValue === 'object' && !Array.isArray(initialValue) && '$date' in initialValue) {
+      return isoToLocalInput((initialValue as { $date: string }).$date);
+    }
+    return '';
+  });
   // ObjectID 타입: 새로 생성 vs 기존 문서 참조 선택
   const [objectIdMode, setObjectIdMode] = useState<'generate' | 'pick'>('generate');
   const [generatedOid, setGeneratedOid] = useState<string>(() => {
@@ -191,6 +225,15 @@ export function InlineSegmentEditor({
       .catch(() => setRefDocs([]));
   }, [refCollectionName]);
 
+  // 필드 기반 참조(FK)로 선언된 필드 — 값 입력 보조용 후보 목록
+  const [fieldRefCandidates, setFieldRefCandidates] = useState<{ value: JsonValue; title: string }[]>([]);
+  useEffect(() => {
+    if (!referenceFieldConfig || !activeDatabaseName) { setFieldRefCandidates([]); return; }
+    getFieldValueCandidates(activeDatabaseName, referenceFieldConfig.targetCollection, referenceFieldConfig.targetKey)
+      .then(setFieldRefCandidates)
+      .catch(() => setFieldRefCandidates([]));
+  }, [referenceFieldConfig?.targetCollection, referenceFieldConfig?.targetKey, activeDatabaseName]);
+
   useEffect(() => {
     keyInputRef.current?.focus();
   }, []);
@@ -214,6 +257,10 @@ export function InlineSegmentEditor({
   // collection/document 레벨은 key+label만 있음
   const isSimpleLevel = level === 'collection' || level === 'document';
 
+  // add 모드 + EJSON 모드가 꺼져 있으면 BSON 확장 타입을 숨김 — edit 모드는 이미 그
+  // 타입으로 저장된 필드를 만났을 수 있으므로 항상 전체 목록을 보여준다
+  const availableTypes: FieldType[] = mode === 'add' && !ejsonMode ? JSON_TYPES : [...JSON_TYPES, ...EJSON_EXTRA_TYPES];
+
   // 파일 붙여넣기/업로드(import) UI를 보여줄지 — collection/document는 항상,
   // field는 추가(add) 모드에서만 (드롭한 파일을 새 필드 값으로 쓸 수 있게)
   const canImport = isSimpleLevel || (level === 'field' && mode === 'add');
@@ -224,12 +271,18 @@ export function InlineSegmentEditor({
   // Import 미리보기 textarea의 JSON 유효성 — 비어있으면 import 없이 그냥 제출
   const importJsonError = isImportOpen && importText.trim() !== '' && isInvalidJson(importText);
 
+  // Decimal128/Long은 number 캐스팅으로 정밀도가 깨지면 안 되므로 텍스트 입력 + 정규식 검증
+  const decimalError = selectedType === 'Decimal128' && !/^-?\d+(\.\d+)?$/.test(rawValue.trim());
+  const longError = selectedType === 'Long' && !/^-?\d+$/.test(rawValue.trim());
+
   const canSubmit =
     keyValue.trim() !== '' &&
     !isDuplicate &&
     !isPending &&
     !containerJsonError &&
     !importJsonError &&
+    !decimalError &&
+    !longError &&
     !(selectedType === 'ObjectID' && objectIdMode === 'pick' && !refDocId);
 
   // ── Import 헬퍼 ──────────────────────────────────────────────────────────────
@@ -353,6 +406,7 @@ export function InlineSegmentEditor({
 
   const parseValue = (): JsonValue => {
     if (selectedType === 'Boolean') return boolValue;
+    if (selectedType === 'Null') return null;
     if (selectedType === 'Number') return Number(rawValue) || 0;
     if (selectedType === 'Object') {
       try { return JSON.parse(rawValue) as JsonValue; } catch { return {}; }
@@ -363,6 +417,12 @@ export function InlineSegmentEditor({
     if (selectedType === 'ObjectID') {
       return { $oid: objectIdMode === 'pick' ? refDocId : generatedOid };
     }
+    if (selectedType === 'Date') {
+      const d = dateValue ? new Date(dateValue) : new Date();
+      return { $date: Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString() };
+    }
+    if (selectedType === 'Decimal128') return { $numberDecimal: rawValue.trim() };
+    if (selectedType === 'Long') return { $numberLong: rawValue.trim() };
     return rawValue;
   };
 
@@ -577,7 +637,7 @@ export function InlineSegmentEditor({
                   className="flex flex-1 overflow-hidden"
                 >
                   <div className="flex flex-wrap gap-1 pb-1">
-                    {ALL_TYPES.map((t) => (
+                    {availableTypes.map((t) => (
                       <button
                         key={t}
                         type="button"
@@ -612,6 +672,10 @@ export function InlineSegmentEditor({
                   />
                 </button>
                 <span className="text-xs text-slate-500">{boolValue ? 'true' : 'false'}</span>
+              </div>
+            ) : selectedType === 'Null' ? (
+              <div className={styles.row}>
+                <span className="text-xs text-slate-400 italic">Value is null</span>
               </div>
             ) : selectedType === 'Object' || selectedType === 'Array' ? (
               <textarea
@@ -683,6 +747,59 @@ export function InlineSegmentEditor({
                     </select>
                   </div>
                 )}
+              </div>
+            ) : selectedType === 'Date' ? (
+              <input
+                type="datetime-local"
+                className={styles.valueInput}
+                value={dateValue}
+                onChange={(e) => setDateValue(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') void handleSubmit(); if (e.key === 'Escape') onCancel(); }}
+              />
+            ) : selectedType === 'Decimal128' || selectedType === 'Long' ? (
+              <div className="flex flex-col gap-1">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className={cn(styles.valueInput, (selectedType === 'Decimal128' ? decimalError : longError) && styles.inputError)}
+                  placeholder={selectedType === 'Decimal128' ? 'e.g. 9.99' : 'e.g. 123456789012'}
+                  value={rawValue}
+                  onChange={(e) => setRawValue(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') void handleSubmit(); if (e.key === 'Escape') onCancel(); }}
+                />
+                {(selectedType === 'Decimal128' ? decimalError : longError) && (
+                  <p className={styles.errorMsg}>
+                    {selectedType === 'Decimal128' ? 'Must be a decimal number.' : 'Must be an integer.'}
+                  </p>
+                )}
+              </div>
+            ) : referenceFieldConfig && (selectedType === 'String' || selectedType === 'Number') ? (
+              <div className="flex flex-col gap-1.5">
+                <p className="text-[11px] text-slate-400 px-0.5">
+                  Reference: <span className="text-cyan-600 font-medium font-mono">{referenceFieldConfig.targetCollection}.{referenceFieldConfig.targetKey}</span>
+                </p>
+                <div className="flex gap-1.5">
+                  <input
+                    type={selectedType === 'Number' ? 'number' : 'text'}
+                    className={styles.valueInput}
+                    placeholder="Value"
+                    value={rawValue}
+                    onChange={(e) => setRawValue(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') void handleSubmit(); if (e.key === 'Escape') onCancel(); }}
+                  />
+                  {fieldRefCandidates.length > 0 && (
+                    <select
+                      className={styles.valueInput}
+                      value=""
+                      onChange={(e) => { if (e.target.value) setRawValue(e.target.value); }}
+                    >
+                      <option value="">Pick…</option>
+                      {fieldRefCandidates.map((c, i) => (
+                        <option key={i} value={String(c.value)}>{c.title}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
               </div>
             ) : (
               <input

@@ -83,6 +83,19 @@ const cloneSnapshot = (snapshot: MockSnapshot): MockSnapshot => {
   };
 };
 
+// 깨진 항목은 던지지 않고 그냥 걸러낸다(titleKey처럼 관대하게) — 스냅샷 전체를
+// invalid 처리해서 시드로 되돌리면 사용자 데이터가 통째로 날아간다
+const normalizeReferenceFields = (raw: unknown): Record<string, { targetCollection: string; targetKey: string }> | undefined => {
+  if (!isPlainObject(raw)) return undefined;
+  const result: Record<string, { targetCollection: string; targetKey: string }> = {};
+  for (const [field, value] of Object.entries(raw)) {
+    if (isPlainObject(value) && typeof value.targetCollection === 'string' && typeof value.targetKey === 'string') {
+      result[field] = { targetCollection: value.targetCollection, targetKey: value.targetKey };
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+};
+
 const validateSnapshot = (candidate: unknown): MockSnapshot => {
   if (!isPlainObject(candidate)) {
     throw new Error('Invalid snapshot');
@@ -116,7 +129,7 @@ const validateSnapshot = (candidate: unknown): MockSnapshot => {
         throw new Error('Invalid snapshot');
       }
 
-      const { name: collectionLabelName, label: collectionLabel, description: collectionDescription, documents, updatedAt: collectionUpdatedAt, titleKey } = collectionValue;
+      const { name: collectionLabelName, label: collectionLabel, description: collectionDescription, documents, updatedAt: collectionUpdatedAt, titleKey, primaryKey, referenceFields } = collectionValue;
       if (
         typeof collectionLabelName !== 'string' ||
         typeof collectionLabel !== 'string' ||
@@ -141,6 +154,8 @@ const validateSnapshot = (candidate: unknown): MockSnapshot => {
         documents: normalizedDocuments,
         updatedAt: collectionUpdatedAt,
         titleKey: typeof titleKey === 'string' ? titleKey : undefined,
+        primaryKey: typeof primaryKey === 'string' ? primaryKey : undefined,
+        referenceFields: normalizeReferenceFields(referenceFields),
       };
     }
 
