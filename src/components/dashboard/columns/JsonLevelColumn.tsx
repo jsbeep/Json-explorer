@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { nextPathId } from '../../../hooks/useExplorerState';
-import { Link, Hash, ToggleLeft, KeyRound, ChevronRight, Calendar, Sigma, Binary } from 'lucide-react';
+import { Link, Hash, ToggleLeft, KeyRound, ChevronRight, Calendar, Sigma, Binary, Filter } from 'lucide-react';
 import { AnimatePresence, m } from 'framer-motion';
 import { SPRING_SNAPPY } from '../../../utils/motionPresets';
 import { cn } from '../../../utils/cn';
@@ -29,6 +29,15 @@ import { DropOverlay } from './DropOverlay';
 import { getFieldType, resolveAtPath, getEntries, hasExtendedTypes } from '../../../utils/jsonTree';
 import { isPathChanged } from '../../../utils/changedPaths';
 import { useFileDrop } from '../../../hooks/useFileDrop';
+import { FilterSortToolbar, type SortOption } from './FilterSortToolbar';
+
+// 필드 정렬 옵션 — array 노드는 key가 인덱스라 숫자로, object 노드는 key를 문자열로 비교
+const FIELD_SORT_OPTIONS: SortOption[] = [
+  { value: 'none', label: 'Default order' },
+  { value: 'key-asc', label: 'Key A→Z' },
+  { value: 'key-desc', label: 'Key Z→A' },
+  { value: 'type', label: 'Type' },
+];
 
 // 필드/배열 요소가 이 개수를 넘으면 한 번에 다 그리지 않고 일부만 렌더링한다
 const ENTRY_RENDER_CAP = 100;
@@ -191,8 +200,38 @@ export function JsonLevelColumn({
   const [showAllEntries, setShowAllEntries] = useState(false);
   useEffect(() => { setShowAllEntries(false); }, [displayDoc, projectionPath.join('.')]);
 
-  const hasMoreEntries = entries.length > ENTRY_RENDER_CAP && !showAllEntries;
-  const visibleEntries = hasMoreEntries ? entries.slice(0, ENTRY_RENDER_CAP) : entries;
+  // 필드 검색/정렬 — 토글 가능한 보조 툴바 (헤더의 필터 아이콘)
+  const [isFieldToolbarOpen, setIsFieldToolbarOpen] = useState(false);
+  const [fieldFilterText, setFieldFilterText] = useState('');
+  const [fieldSortMode, setFieldSortMode] = useState('none');
+  const isFieldFilterActive = fieldFilterText.trim().length > 0 || fieldSortMode !== 'none';
+
+  const displayEntries = (() => {
+    const needle = fieldFilterText.trim().toLowerCase();
+    let result = !needle
+      ? entries
+      : entries.filter(({ key, value }) => {
+          if (key.toLowerCase().includes(needle)) return true;
+          try {
+            return JSON.stringify(value).toLowerCase().includes(needle);
+          } catch {
+            return false;
+          }
+        });
+    if (fieldSortMode === 'key-asc' || fieldSortMode === 'key-desc') {
+      const dir = fieldSortMode === 'key-asc' ? 1 : -1;
+      const isArray = Array.isArray(currentNode);
+      result = [...result].sort((a, b) => (
+        isArray ? (Number(a.key) - Number(b.key)) * dir : a.key.localeCompare(b.key) * dir
+      ));
+    } else if (fieldSortMode === 'type') {
+      result = [...result].sort((a, b) => getFieldType(a.value).localeCompare(getFieldType(b.value)));
+    }
+    return result;
+  })();
+
+  const hasMoreEntries = displayEntries.length > ENTRY_RENDER_CAP && !showAllEntries;
+  const visibleEntries = hasMoreEntries ? displayEntries.slice(0, ENTRY_RENDER_CAP) : displayEntries;
 
   // ── 탐색 — goSibling 패턴 ─────────────────────────────────────────────────
 
@@ -672,6 +711,9 @@ export function JsonLevelColumn({
       <div className="shrink-0 flex items-center gap-2.5 px-4 h-12 border-b border-slate-100/80">
         <HeaderIcon node={currentNode} />
         <span className="text-sm font-semibold text-slate-700 truncate flex-1">{path.label}</span>
+        <span className="text-xs font-mono text-slate-400 tabular-nums shrink-0">
+          {isFieldFilterActive ? `${displayEntries.length}/${entries.length}` : entries.length}
+        </span>
         {chainColor && (
           <button
             type="button"
@@ -703,8 +745,33 @@ export function JsonLevelColumn({
         >
           EJSON
         </button>
-        <span className="text-xs font-mono text-slate-400 tabular-nums">{entries.length}</span>
+        <button
+          type="button"
+          className={cn(
+            'relative p-1.5 rounded-lg transition-colors shrink-0',
+            isFieldToolbarOpen || isFieldFilterActive ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400 hover:bg-slate-200/70 hover:text-slate-600',
+          )}
+          title="Filter / sort fields"
+          onClick={() => setIsFieldToolbarOpen((v) => !v)}
+        >
+          {isFieldFilterActive && !isFieldToolbarOpen && (
+            <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-500" />
+          )}
+          <Filter size={13} />
+        </button>
       </div>
+
+      {/* 필드 검색/정렬 툴바 */}
+      {isFieldToolbarOpen && (
+        <FilterSortToolbar
+          filterText={fieldFilterText}
+          onFilterTextChange={setFieldFilterText}
+          filterPlaceholder="Search field key or value…"
+          sortValue={fieldSortMode}
+          onSortChange={setFieldSortMode}
+          sortOptions={FIELD_SORT_OPTIONS}
+        />
+      )}
 
       {/* 목록 */}
       <div ref={scrollRef} className={cn('px-2 py-2 flex flex-col gap-0.5', isNested ? 'min-h-0' : 'flex-1 overflow-y-auto min-h-0')}>
@@ -725,6 +792,8 @@ export function JsonLevelColumn({
           <p className="flex-1 flex items-center justify-center text-sm text-slate-400 py-10">Loading…</p>
         ) : !displayDoc ? (
           <p className="flex-1 flex items-center justify-center text-sm text-slate-400 py-10">Select a document</p>
+        ) : entries.length > 0 && !displayEntries.length ? (
+          <p className="flex-1 flex items-center justify-center text-sm text-slate-400 py-10">No fields match the filter</p>
         ) : (
           <AnimatePresence>
             {visibleEntries.map(({ key, value }) => renderField(key, value))}
@@ -737,7 +806,7 @@ export function JsonLevelColumn({
             className="mx-1 my-1 px-3 py-2.5 rounded-2xl text-sm font-medium text-slate-500 bg-slate-50 hover:bg-slate-100 transition-colors"
             onClick={() => setShowAllEntries(true)}
           >
-            Showing {ENTRY_RENDER_CAP.toLocaleString()} of {entries.length.toLocaleString()} · Show more
+            Showing {ENTRY_RENDER_CAP.toLocaleString()} of {displayEntries.length.toLocaleString()} · Show more
           </button>
         )}
 

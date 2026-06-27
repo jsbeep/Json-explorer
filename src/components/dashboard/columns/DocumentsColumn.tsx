@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FileText, Tag, Check, X, ArrowLeft, KeyRound, Lock, Link, AlertTriangle } from 'lucide-react';
+import { FileText, Tag, Check, X, ArrowLeft, KeyRound, Lock, Link, AlertTriangle, Filter } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import type { ActivePath, CollectionSummary, DocumentSummary, JsonObject, MockMutationRequest } from '../../../types/explorer';
 import { ColumnItem, ColumnSkeletonList } from './ColumnItem';
@@ -13,6 +13,17 @@ import { getFullDocumentByIdInCollection } from '../../../services/mockAPI';
 import { columnListStyles as styles } from './columnListStyles';
 import { isPathChanged } from '../../../utils/changedPaths';
 import { useFileDrop } from '../../../hooks/useFileDrop';
+import { FilterSortToolbar, type SortOption } from './FilterSortToolbar';
+
+const DOCUMENT_SORT_OPTIONS: SortOption[] = [
+  { value: 'none', label: 'Default order' },
+  { value: 'title-asc', label: 'Title A→Z' },
+  { value: 'title-desc', label: 'Title Z→A' },
+  { value: 'fields-desc', label: 'Most fields' },
+  { value: 'fields-asc', label: 'Fewest fields' },
+  { value: 'updated-desc', label: 'Recently updated' },
+  { value: 'updated-asc', label: 'Oldest updated' },
+];
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -70,6 +81,42 @@ export function DocumentsColumn({
   const [isEditingPrimaryKey, setIsEditingPrimaryKey] = useState(false);
   const [primaryKeyInput, setPrimaryKeyInput] = useState('');
   const [isManagingRefs, setIsManagingRefs] = useState(false);
+
+  // 문서 검색/정렬 — 토글 가능한 보조 툴바 (헤더의 필터 아이콘)
+  const [isDocToolbarOpen, setIsDocToolbarOpen] = useState(false);
+  const [docFilterText, setDocFilterText] = useState('');
+  const [docSortMode, setDocSortMode] = useState('none');
+  const isDocFilterActive = docFilterText.trim().length > 0 || docSortMode !== 'none';
+
+  const displayDocuments = (() => {
+    const needle = docFilterText.trim().toLowerCase();
+    let result = !needle
+      ? documents
+      : documents.filter((doc) => doc.title.toLowerCase().includes(needle) || doc.preview.toLowerCase().includes(needle));
+    switch (docSortMode) {
+      case 'title-asc':
+        result = [...result].sort((a, b) => a.title.localeCompare(b.title));
+        break;
+      case 'title-desc':
+        result = [...result].sort((a, b) => b.title.localeCompare(a.title));
+        break;
+      case 'fields-asc':
+        result = [...result].sort((a, b) => a.fieldCount - b.fieldCount);
+        break;
+      case 'fields-desc':
+        result = [...result].sort((a, b) => b.fieldCount - a.fieldCount);
+        break;
+      case 'updated-asc':
+        result = [...result].sort((a, b) => a.updatedAt - b.updatedAt);
+        break;
+      case 'updated-desc':
+        result = [...result].sort((a, b) => b.updatedAt - a.updatedAt);
+        break;
+      default:
+        break;
+    }
+    return result;
+  })();
 
   // 컬럼 전체에 파일을 드롭하면 "문서 추가" 에디터를 열고 그 파일을 업로드한 것처럼 처리
   const { isDragOver: isColumnDragOver, dragHandlers } = useFileDrop((file) => {
@@ -178,6 +225,9 @@ export function DocumentsColumn({
           <>
             <FileText size={14} className={styles.headerIcon} />
             <span className={styles.headerTitle}>{collectionLabel}</span>
+            <span className="text-xs font-mono text-slate-400 tabular-nums shrink-0">
+              {isDocFilterActive ? `${displayDocuments.length}/${documents.length}` : documents.length}
+            </span>
             <button
               type="button"
               className={cn(
@@ -231,10 +281,35 @@ export function DocumentsColumn({
               <Link size={12} />
               <span className="text-[11px] font-mono">{Object.keys(referenceFields).length}</span>
             </button>
-            <span className={styles.headerCount}>{documents.length}</span>
+            <button
+              type="button"
+              className={cn(
+                'relative p-1.5 rounded-lg transition-colors shrink-0',
+                isDocToolbarOpen || isDocFilterActive ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400 hover:bg-slate-200/70 hover:text-slate-600',
+              )}
+              title="Filter / sort documents"
+              onClick={() => setIsDocToolbarOpen((v) => !v)}
+            >
+              {isDocFilterActive && !isDocToolbarOpen && (
+                <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              )}
+              <Filter size={13} />
+            </button>
           </>
         )}
       </div>
+
+      {/* 문서 검색/정렬 툴바 */}
+      {isDocToolbarOpen && (
+        <FilterSortToolbar
+          filterText={docFilterText}
+          onFilterTextChange={setDocFilterText}
+          filterPlaceholder="Search title or preview…"
+          sortValue={docSortMode}
+          onSortChange={setDocSortMode}
+          sortOptions={DOCUMENT_SORT_OPTIONS}
+        />
+      )}
 
       {/* 목록 */}
       <div className={styles.list}>
@@ -253,7 +328,7 @@ export function DocumentsColumn({
         {isLoading && !documents.length ? (
           <ColumnSkeletonList count={5} />
         ) : (
-          documents.map((doc) => {
+          displayDocuments.map((doc) => {
             const isEditing = editingId === `document:${doc.id}`;
             const isHighlighted = activeDatabaseName && activeCollectionName
               ? isPathChanged(changedPaths, `databases.${activeDatabaseName}.collections.${activeCollectionName}.documents.${doc.id}`)
@@ -352,6 +427,12 @@ export function DocumentsColumn({
           <div className={styles.empty}>
             <FileText size={28} className="opacity-30" />
             <span>No documents</span>
+          </div>
+        )}
+        {!!documents.length && !displayDocuments.length && (
+          <div className={styles.empty}>
+            <FileText size={28} className="opacity-30" />
+            <span>No documents match the filter</span>
           </div>
         )}
       </div>
