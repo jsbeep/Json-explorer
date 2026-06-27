@@ -64,6 +64,9 @@ interface InlineSegmentEditorProps {
   mode: 'add' | 'edit';
   level: 'collection' | 'document' | 'field';
   initialKey?: string;
+  // array에 새 항목을 추가할 때만 true — key가 다음 인덱스로 고정되므로 입력을 잠근다.
+  // (예전엔 keyValue가 숫자인지로 추론했는데, 숫자로 시작하는 일반 이름에도 번져서 버그가 됐음)
+  lockKey?: boolean;
   initialType?: FieldType;
   initialValue?: JsonValue;
   siblingKeys: string[];
@@ -135,6 +138,7 @@ export function InlineSegmentEditor({
   mode,
   level,
   initialKey = '',
+  lockKey = false,
   initialType = 'String',
   initialValue,
   siblingKeys,
@@ -479,7 +483,7 @@ export function InlineSegmentEditor({
               )}
               placeholder={level === 'collection' ? 'Collection name (Drop file)' : level === 'document' ? 'Document name (Drop file)' : 'Key name'}
               value={keyValue}
-              disabled={mode === 'add' && keyValue.trim() !== '' && !Number.isNaN(Number(keyValue))}
+              disabled={mode === 'add' && lockKey}
               onChange={(e) => {
                 const v = e.target.value;
                 setKeyValue(v);

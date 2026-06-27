@@ -54,6 +54,19 @@ export function FilterSortToolbar({
           <option key={opt.value} value={opt.value}>{opt.label}</option>
         ))}
       </select>
+      {sortValue !== 'none' && (
+        <button
+          type="button"
+          title="Clear all filters"
+          className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:bg-slate-200/70 hover:text-slate-600 transition-colors"
+          onClick={() => {
+            onFilterTextChange('');
+            onSortChange('none');
+          }}
+        >
+          <X size={14} />
+        </button>
+      )}
     </div>
   );
 }

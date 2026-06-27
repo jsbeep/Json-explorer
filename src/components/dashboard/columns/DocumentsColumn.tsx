@@ -223,11 +223,13 @@ export function DocumentsColumn({
           </>
         ) : (
           <>
-            <FileText size={14} className={styles.headerIcon} />
+            <div className="relative flex items-center gap-0 leading-none mr-0.5">
+              <FileText size={15} className={styles.headerIcon} />
+              <span className="absolute pl-[1px] -bottom-[0.2rem] right-0.5 translate-x-1/2 text-xs font-mono text-slate-500 tabular-nums shrink-0 leading-[0.9] bg-white rounded-s">
+                {isDocFilterActive ? `${displayDocuments.length}/${documents.length}` : documents.length}
+              </span>
+            </div>
             <span className={styles.headerTitle}>{collectionLabel}</span>
-            <span className="text-xs font-mono text-slate-400 tabular-nums shrink-0">
-              {isDocFilterActive ? `${displayDocuments.length}/${documents.length}` : documents.length}
-            </span>
             <button
               type="button"
               className={cn(

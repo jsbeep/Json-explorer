@@ -506,7 +506,11 @@ export function JsonLevelColumn({
       }
       switch (type) {
         case 'string':
-          return <span className="text-sm font-mono text-emerald-600 truncate">&ldquo;{String(value)}&rdquo;</span>;
+          return <div className="flex items-center text-sm font-mono text-emerald-600 truncate">
+            <span>"</span>
+            <span>{String(value)}</span>
+            <span>"</span>
+          </div>;
         case 'number':
           return (
             <>
@@ -709,11 +713,13 @@ export function JsonLevelColumn({
 
       {/* 헤더 */}
       <div className="shrink-0 flex items-center gap-2.5 px-4 h-12 border-b border-slate-100/80">
-        <HeaderIcon node={currentNode} />
+        <div className="relative flex items-center gap-0 leading-none mr-0.5">
+          <HeaderIcon node={currentNode} />
+          <span className="absolute pl-[1px] -bottom-[0.2rem] right-0.5 translate-x-1/2 text-xs font-mono text-slate-500 tabular-nums shrink-0 leading-[0.9] bg-white rounded-s">
+            {isFieldFilterActive ? `${displayEntries.length}/${entries.length}` : entries.length}
+          </span>
+        </div>
         <span className="text-sm font-semibold text-slate-700 truncate flex-1">{path.label}</span>
-        <span className="text-xs font-mono text-slate-400 tabular-nums shrink-0">
-          {isFieldFilterActive ? `${displayEntries.length}/${entries.length}` : entries.length}
-        </span>
         {chainColor && (
           <button
             type="button"
@@ -818,6 +824,7 @@ export function JsonLevelColumn({
               level="field"
               siblingKeys={entries.map((e) => e.key)}
               initialKey={isArrayNode ? String(entries.length) : undefined}
+              lockKey={isArrayNode}
               activeDatabaseName={mutateDatabaseName}
               ejsonMode={ejsonMode}
               onSubmit={async (data) => {

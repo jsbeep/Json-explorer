@@ -79,9 +79,12 @@ export function CollectionsColumn({
 
       {/* 헤더 */}
       <div className={styles.header}>
-        <Layers size={14} className={styles.headerIcon} />
-        <span className={styles.headerTitle}>Collections</span>
-        <span className={styles.headerCount}>{collections.length}</span>
+        <div className="relative flex items-center gap-0 leading-none mr-0.5">
+          <Layers size={15} className={styles.headerIcon} />
+          <span className="absolute pl-[1px] -bottom-[0.2rem] right-0 translate-x-1/2 text-xs font-mono text-slate-500 tabular-nums shrink-0 leading-[0.9] bg-white rounded-s">
+            {collections.length}
+          </span>
+        </div>
       </div>
 
       {/* 목록 */}

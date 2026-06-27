@@ -555,6 +555,23 @@ export const mutateData = async (op: MockMutationRequest): Promise<MockMutationR
         newDocument._id = generateUniqueKey(String(source._id), existingIds);
       }
 
+      // 화면에 표시되는 이름(titleKey 우선, 없으면 name/title, 그것도 없으면 PK 필드)
+      // 뒤에 "copy"를 붙여 목록에서 원본과 복제본을 구분할 수 있게 한다 —
+      // summarizeDocument의 title 결정 순서(titleKey → name/title → PK)와 동일하게 맞춤.
+      const titleField = collection.titleKey && typeof source[collection.titleKey] === 'string' && (source[collection.titleKey] as string).trim()
+        ? collection.titleKey
+        : typeof source.name === 'string' && (source.name as string).trim()
+        ? 'name'
+        : typeof source.title === 'string' && (source.title as string).trim()
+        ? 'title'
+        : collection.primaryKey && typeof source[collection.primaryKey] === 'string' && (source[collection.primaryKey] as string).trim()
+        ? collection.primaryKey
+        : undefined;
+
+      if (titleField) {
+        newDocument[titleField] = `${newDocument[titleField] as string} copy`;
+      }
+
       const provisionalIndex = collection.documents.length;
       const newDocId = getDocumentId(newDocument, collection.primaryKey, provisionalIndex) ?? '';
       collection.documents.push(newDocument);
