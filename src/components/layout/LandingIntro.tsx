@@ -1,31 +1,33 @@
 // path: src/components/layout/LandingIntro.tsx
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { GitBranch, MousePointerClick, PencilLine, FlaskConical, X } from 'lucide-react';
+import { GitBranch, MousePointerClick, PencilLine, FlaskConical, X, Sparkles, Loader2 } from 'lucide-react';
 
 interface LandingIntroProps {
   onClose: () => void;
+  onLoadSample: () => Promise<void>;
 }
 
 const FEATURES = [
   {
     icon: GitBranch,
     title: 'Miller Column Drill-down',
-    description: 'Dive deeper column by column to intuitively explore JSON structures.',
+    description: 'Dive deeper column by column to intuitively explore any JSON or EJSON document.',
   },
   {
     icon: MousePointerClick,
     title: 'Reference Tracking',
-    description: 'Automatically detects ObjectId and reference fields, jumping to linked documents with a single click.',
+    description: 'Automatically detects ObjectId, DBRef, and reference fields, jumping to linked documents with a single click.',
   },
   {
     icon: PencilLine,
     title: 'Inline Editing',
-    description: 'Double-click to edit values instantly, with full Undo support.',
+    description: 'Double-click to edit values instantly — including EJSON types like Date, Decimal128, and Long — with full Undo support.',
   },
   {
     icon: FlaskConical,
     title: 'Mock Data Prototyping',
-    description: 'A project that validates UI with shared-type mock data before wiring up the real API.',
+    description: 'A project that validates UI with shared-type mock data before wiring up the real MongoDB API.',
   },
 ] as const;
 
@@ -36,7 +38,21 @@ const fadeUp = {
   visible: { opacity: 1, y: 0 },
 };
 
-export function LandingIntro({ onClose }: LandingIntroProps) {
+export function LandingIntro({ onClose, onLoadSample }: LandingIntroProps) {
+  const [isLoadingSample, setIsLoadingSample] = useState(false);
+
+  const handleLoadSample = async () => {
+    setIsLoadingSample(true);
+    try {
+      await onLoadSample();
+      onClose(); // 성공하면 인트로를 닫아 바로 결과를 보여줌
+    } catch {
+      // mutate 훅이 이미 에러 토스트를 띄움 — 여기서는 모달 유지만
+    } finally {
+      setIsLoadingSample(false);
+    }
+  };
+
   return (
     <section className="relative flex-1 flex-col w-full px-6 py-24 sm:px-10 lg:px-20">
       <button
@@ -58,7 +74,7 @@ export function LandingIntro({ onClose }: LandingIntroProps) {
           transition={{ duration: 0.5 }}
           className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700"
         >
-          JSON Explorer & Editor
+          JSON & EJSON Explorer
         </motion.span>
 
         <motion.h2
@@ -71,7 +87,7 @@ export function LandingIntro({ onClose }: LandingIntroProps) {
         >
           Miller Column으로 탐색하는
           <br className="hidden sm:block" />
-          가장 직관적인 JSON 뷰어
+          가장 직관적인 JSON · EJSON 뷰어
           <div className="mt-5 h-1 w-16 rounded-full bg-emerald-400/25" />
         </motion.h2>
 
@@ -83,12 +99,28 @@ export function LandingIntro({ onClose }: LandingIntroProps) {
           transition={{ duration: 0.5, delay: 0.1 }}
           className="mt-4 max-w-2xl text-base leading-relaxed text-slate-500"
         >
-          A free JSON explorer for developers working with MongoDB and Firestore data. Reference tracking, inline editing,
-          and mock-data-based prototyping — all in one screen.
+          A free explorer for any JSON — with full EJSON support unlocked for MongoDB and Firebase data (ObjectId, DBRef,
+          Date, Decimal128, Long). Reference tracking, inline editing, and mock-data-based prototyping, built as the
+          foundation for a future MongoDB real-time dashboard.
         </motion.p>
+
+        <motion.button
+          type="button"
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, amount: 0.6 }}
+          variants={fadeUp}
+          transition={{ duration: 0.5, delay: 0.15 }}
+          onClick={() => void handleLoadSample()}
+          disabled={isLoadingSample}
+          className="mt-6 inline-flex items-center gap-2 rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-soft transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isLoadingSample ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+          Add Sample Dataset
+        </motion.button>
       </div>
 
-      <div className="mx-auto mt-16 grid max-w-5xl grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mx-auto mt-8 grid max-w-5xl grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {FEATURES.map(({ icon: Icon, title, description }, index) => (
           <motion.div
             key={title}
@@ -114,7 +146,7 @@ export function LandingIntro({ onClose }: LandingIntroProps) {
         viewport={{ once: true, amount: 0.6 }}
         variants={fadeUp}
         transition={{ duration: 0.5 }}
-        className="mx-auto mt-16 flex max-w-3xl flex-wrap items-center justify-center gap-2 text-xs font-medium text-slate-400"
+        className="mx-auto mt-8 flex max-w-3xl flex-wrap items-center justify-center gap-2 text-xs font-medium text-slate-400"
       >
         {TECH_STACK.map((tech) => (
           <span key={tech} className="rounded-full border border-slate-200 bg-white px-3 py-1">

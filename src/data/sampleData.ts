@@ -1,7 +1,7 @@
 // path: src/data/sampleData.ts
 import type { BsonObjectId, JsonObject, JsonValue, MockSnapshot } from '../types/explorer';
 
-export const ACTIVE_DATABASE = 'mongolive-dev';
+export const SAMPLE_DATABASE_NAME = 'sample-store';
 const SNAPSHOT_VERSION = 1;
 
 export const makeOid = (seed: string): BsonObjectId => {
@@ -40,7 +40,13 @@ interface ReviewSeed {
   replies?: ReplySeed[];
 }
 
-export const createSeedSnapshot = (): MockSnapshot => {
+// 빈 DB로 시작하되, 이미 같은 이름의 DB가 있으면(샘플을 두 번 추가한 경우) '-copy'를 붙여 충돌을 피한다.
+export const buildSampleDatabase = (existingNames: string[] = []) => {
+  const taken = new Set(existingNames);
+  const isDuplicate = taken.has(SAMPLE_DATABASE_NAME);
+  const name = isDuplicate ? `${SAMPLE_DATABASE_NAME}-copy` : SAMPLE_DATABASE_NAME;
+  const label = isDuplicate ? 'Sample Store (Copy)' : 'Sample Store';
+
   const now = Date.now();
   const userSeeds = [
     { name: 'Ava Kim', role: 'admin' },
@@ -62,7 +68,7 @@ export const createSeedSnapshot = (): MockSnapshot => {
       name: seed.name,
       email: `${seed.name.toLowerCase().replace(/\s+/g, '.')}@mongolive.dev`,
       role: seed.role,
-      createdAt,
+      createdAt: { $date: createdAt },
     };
   });
 
@@ -124,6 +130,8 @@ export const createSeedSnapshot = (): MockSnapshot => {
     },
   ];
 
+  // price/stock은 reduce 등 내부 합산 로직에서 숫자로 그대로 쓰고, 컬렉션에 저장할 때만
+  // canonical EJSON wrapper($numberDecimal/$numberLong)로 감싸 보여준다(아래 productDocuments).
   const products = productSeeds.map((seed, index) => ({
     _id: makeOid(`products-${index + 1}`),
     name: seed.name,
@@ -132,6 +140,12 @@ export const createSeedSnapshot = (): MockSnapshot => {
     tags: [...seed.tags],
     // 제품마다 카테고리별로 형태가 다른 specs — 같은 컬렉션 안의 schema-less 문서를 보여줌
     specs: structuredClone(seed.specs),
+  }));
+
+  const productDocuments = products.map((product) => ({
+    ...product,
+    price: { $numberDecimal: product.price.toFixed(2) },
+    stock: { $numberLong: String(product.stock) },
   }));
 
   const orderStatuses = ['paid', 'pending', 'shipped', 'cancelled'] as const;
@@ -165,7 +179,7 @@ export const createSeedSnapshot = (): MockSnapshot => {
       userId: {
         $ref: 'users',
         $id: user._id,
-        $db: ACTIVE_DATABASE,
+        $db: name,
       },
       amount: items.reduce((total, item) => total + item.price * item.quantity, 0),
       status: orderStatuses[index % orderStatuses.length],
@@ -184,10 +198,10 @@ export const createSeedSnapshot = (): MockSnapshot => {
         authorId: {
           $ref: 'users',
           $id: author._id,
-          $db: ACTIVE_DATABASE,
+          $db: name,
         },
         body: seed.body,
-        createdAt: formatDate(now - depth * 1_800_000 - index * 600_000),
+        createdAt: { $date: formatDate(now - depth * 1_800_000 - index * 600_000) },
         ...(nested.length > 0 ? { replies: nested } : {}),
       };
     });
@@ -366,61 +380,72 @@ export const createSeedSnapshot = (): MockSnapshot => {
       productId: {
         $ref: 'products',
         $id: product._id,
-        $db: ACTIVE_DATABASE,
+        $db: name,
       },
       authorId: {
         $ref: 'users',
         $id: author._id,
-        $db: ACTIVE_DATABASE,
+        $db: name,
       },
       rating: seed.rating,
       title: seed.title,
       body: seed.body,
-      createdAt: formatDate(now - index * 43_200_000),
+      createdAt: { $date: formatDate(now - index * 43_200_000) },
       ...(replies.length > 0 ? { replies } : {}),
     };
   });
 
   return {
+    name,
+    label,
+    description:
+      'Sample commerce dataset with users, products, orders, and reviews — showcasing MongoDB-style ObjectId, DBRef, and canonical EJSON types (Date, Decimal128, Long)',
+    collections: {
+      orders: {
+        name: 'orders',
+        label: 'Orders',
+        description: 'Purchase records linked to users by DBRef',
+        documents: orders,
+        updatedAt: now - 2_400_000,
+      },
+      users: {
+        name: 'users',
+        label: 'Users',
+        description: 'Registered demo users, with EJSON $date timestamps',
+        documents: users,
+        updatedAt: now - 3_600_000,
+      },
+      products: {
+        name: 'products',
+        label: 'Products',
+        description: 'Product catalog with canonical Decimal128 pricing and Long inventory counts',
+        documents: productDocuments,
+        updatedAt: now - 1_800_000,
+      },
+      reviews: {
+        name: 'reviews',
+        label: 'Reviews',
+        description: 'Threaded product reviews with arbitrarily nested replies and EJSON $date timestamps',
+        documents: reviews,
+        updatedAt: now - 900_000,
+        titleKey: 'title',
+      },
+    },
+  };
+};
+
+export const createEmptyWorkspaceSnapshot = (): MockSnapshot => {
+  const now = Date.now();
+  return {
     version: SNAPSHOT_VERSION,
-    activeDatabase: ACTIVE_DATABASE,
+    activeDatabase: 'workspace',
     databases: {
-      [ACTIVE_DATABASE]: {
-        name: ACTIVE_DATABASE,
-        label: 'Mongolive Dev',
-        description: 'Seed database used by the local explorer mock API',
-        collections: {
-          orders: {
-            name: 'orders',
-            label: 'Orders',
-            description: 'Purchase records linked to users by DBRef',
-            documents: orders,
-            updatedAt: now - 2_400_000,
-          },
-          users: {
-            name: 'users',
-            label: 'Users',
-            description: 'Registered demo users for the explorer',
-            documents: users,
-            updatedAt: now - 3_600_000,
-          },
-          products: {
-            name: 'products',
-            label: 'Products',
-            description: 'Product catalog with pricing and inventory',
-            documents: products,
-            updatedAt: now - 1_800_000,
-          },
-          reviews: {
-            name: 'reviews',
-            label: 'Reviews',
-            description: 'Threaded product reviews with arbitrarily nested replies',
-            documents: reviews,
-            updatedAt: now - 900_000,
-            titleKey: 'title',
-          },
-        },
-        updatedAt: now - 1_200_000,
+      workspace: {
+        name: 'workspace',
+        label: 'Workspace',
+        description: '',
+        collections: {},
+        updatedAt: now,
       },
     },
     updatedAt: now,

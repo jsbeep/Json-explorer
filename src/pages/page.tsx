@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useExplorerState } from '../hooks/useExplorerState';
+import { buildSampleDatabase } from '../data/sampleData';
 import { Header } from '../components/layout/Header';
 import { LandingIntro } from '../components/layout/LandingIntro';
 import { Footer } from '../components/layout/Footer';
@@ -55,6 +56,7 @@ export default function ExplorerPage() {
     selectDocument,
     pushJsonPath,
     popToIndex,
+    pushFieldPath,
     pushReference,
     navigateToReference,
     pushReferenceByField,
@@ -92,6 +94,8 @@ export default function ExplorerPage() {
           <Breadcrumbs
             breadcrumbs={breadcrumbs}
             onNavigate={(index) => popToIndex(index)}
+            openDocument={openDocument}
+            onCommitFieldPath={pushFieldPath}
           />
           <MillerColumns
             visibleColumns={visibleColumns}
@@ -130,8 +134,13 @@ export default function ExplorerPage() {
 
       {/* 스크롤 시 노출되는 소개 섹션 — X로 닫으면 Footer까지 함께 사라지고 explorer 패널만 남는다 */}
       {showIntro && (
-        <div className="flex flex-col h-screen w-full">
-          <LandingIntro onClose={() => setShowIntro(false)} />
+        <div className="flex flex-col min-h-screen w-full">
+          <LandingIntro
+            onClose={() => setShowIntro(false)}
+            onLoadSample={async () => {
+              await mutate({ type: 'createDatabase', database: buildSampleDatabase(databases.map((d) => d.name)) });
+            }}
+          />
           <Footer />
         </div>
       )}

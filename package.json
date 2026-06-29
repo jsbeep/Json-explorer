@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": false,
   "type": "module",
-  "description": "Reusable Data Explorer UI components for MongoDB real-time dashboards.",
+  "description": "Reusable JSON & EJSON Data Explorer UI components — the foundation for a MongoDB real-time dashboard.",
   "main": "dist/Json-explorer.cjs",
   "module": "dist/Json-explorer.js",
   "types": "dist/index.d.ts",

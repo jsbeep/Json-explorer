@@ -191,8 +191,8 @@ export function JsonLevelColumn({
   const entries = getEntries(currentNode);
 
   // EJSON 모드(Date/Decimal128/Long 필드 추가 가능 여부) — 이 컬럼이 마운트될 때 현재
-  // 노드 하위에 그런 필드가 이미 있으면 자동으로 켜진 상태로 시작하고, 이후엔 헤더의
-  // 토글로 수동 전환한다. mutation으로 currentNode 참조가 바뀌어도 다시 계산하지
+  // 노드 하위에 그런 필드나 ObjectId가 이미 있으면 자동으로 켜진 상태로 시작하고, 이후엔
+  // 헤더의 토글로 수동 전환한다. mutation으로 currentNode 참조가 바뀌어도 다시 계산하지
   // 않는다 — 그러면 막 켠 토글이 첫 필드를 추가하기도 전에 꺼져버린다.
   const [ejsonMode, setEjsonMode] = useState(() => hasExtendedTypes(currentNode));
 

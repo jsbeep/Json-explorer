@@ -85,6 +85,7 @@ export interface UseExplorerStateResult {
   selectDocument: (oid: string, title: string) => Promise<void>;
   pushJsonPath: (path: ActivePath) => void;
   popToIndex: (index: number) => void;
+  pushFieldPath: (segments: string[]) => void;
   pushReference: (oid: string, fieldKey: string, popIndex?: number) => Promise<void>;
   navigateToReference: (oid: string) => Promise<void>;
   pushReferenceByField: (database: string, collection: string, key: string, value: JsonValue, fieldKey: string, popIndex?: number) => Promise<void>;
@@ -321,6 +322,41 @@ export function useExplorerState(): UseExplorerStateResult {
   const popToIndex = useCallback((index: number) => {
     setActivePaths((prev) => prev.slice(0, index + 1));
     // json depth 이하로 pop 시 openDocument 상태 유지 (컬럼이 재사용)
+    setEditingId(null);
+  }, []);
+
+  // breadcrumb dot-path 입력에서 커밋된 경로를 한 번에 여러 depth로 push —
+  // 한 단계씩 pushJsonPath를 반복 호출하면 컬럼 애니메이션이 N번 튀므로
+  // 문서 루트 기준으로 한 번의 setActivePaths로 일괄 추가한다.
+  const pushFieldPath = useCallback((segments: string[]) => {
+    setActivePaths((prev) => {
+      let baseIndex = -1;
+      for (let i = prev.length - 1; i >= 0; i--) {
+        const ap = prev[i];
+        if (ap.columnKind !== 'json') continue;
+        if (ap.kind === 'normal' && (ap.projectionPath?.length ?? 0) === 0) {
+          baseIndex = i;
+          break;
+        }
+        if (ap.kind === 'reference') break; // 참조 체인 — v1 미지원
+      }
+      if (baseIndex === -1) return prev;
+      const base = prev.slice(0, baseIndex + 1);
+      const docOid = (base[baseIndex] as NormalActivePath).documentOid ?? '';
+      let acc: string[] = [];
+      const pushed: NormalActivePath[] = segments.map((seg) => {
+        acc = [...acc, seg];
+        return {
+          kind: 'normal',
+          columnKind: 'json',
+          label: seg,
+          documentOid: docOid,
+          projectionPath: acc,
+          comp: { id: nextPathId(), direction: -1 },
+        };
+      });
+      return [...base, ...pushed];
+    });
     setEditingId(null);
   }, []);
 
@@ -691,20 +727,28 @@ export function useExplorerState(): UseExplorerStateResult {
     showToast('Undone', 'success');
   }, [mutate, showToast]);
 
+  // 새로고침은 데이터만 다시 받아오는 게 아니라 collection/document/field 경로도 전부 비운다 —
+  // selectDatabase가 쓰는 것과 같은 초기화 패턴으로 collections 목록까지만 남긴다.
   const refresh = useCallback(async () => {
     if (!activeDatabaseRef.current) return;
     setIsLoading(true);
     try {
       const cols = await getCollections(activeDatabaseRef.current);
+      activeCollectionRef.current = null;
+      activeDocumentOidRef.current = null;
       setCollections(cols);
-      if (activeCollectionRef.current) {
-        const docs = await getDocuments(activeCollectionRef.current);
-        setDocuments(docs);
-        if (activeDocumentOidRef.current) {
-          const doc = await getFullDocumentByIdInCollection(activeDatabaseRef.current, activeCollectionRef.current, activeDocumentOidRef.current);
-          setOpenDocument(doc);
-        }
-      }
+      setDocuments([]);
+      setOpenDocument(null);
+      setActivePaths([
+        {
+          kind: 'normal',
+          columnKind: 'collections',
+          label: activeDatabaseRef.current,
+          databaseName: activeDatabaseRef.current,
+          comp: { id: nextPathId(), direction: -1 },
+        },
+      ]);
+      setEditingId(null);
     } catch {
       showToast('Failed to refresh.', 'error');
     } finally {
@@ -745,6 +789,7 @@ export function useExplorerState(): UseExplorerStateResult {
     selectDocument,
     pushJsonPath,
     popToIndex,
+    pushFieldPath,
     pushReference,
     navigateToReference,
     pushReferenceByField,

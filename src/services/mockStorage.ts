@@ -8,7 +8,7 @@ import {
   type MockDatabaseRecord,
   type MockSnapshot,
 } from '../types/explorer';
-import { createSeedSnapshot } from '../data/sampleData';
+import { createEmptyWorkspaceSnapshot } from '../data/sampleData';
 
 const STORAGE_KEY = 'mongolive_snapshot';
 const SNAPSHOT_VERSION = 1;
@@ -204,14 +204,14 @@ const loadInitialSnapshot = (): MockSnapshot => {
       try {
         return validateSnapshot(JSON.parse(raw) as unknown);
       } catch {
-        const seed = createSeedSnapshot();
+        const seed = createEmptyWorkspaceSnapshot();
         storage.setItem(STORAGE_KEY, JSON.stringify(seed));
         return seed;
       }
     }
   }
 
-  const seed = createSeedSnapshot();
+  const seed = createEmptyWorkspaceSnapshot();
   writeSnapshot(seed);
   return seed;
 };

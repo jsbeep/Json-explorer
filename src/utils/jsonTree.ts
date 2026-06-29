@@ -12,8 +12,8 @@ export type JsonFieldType =
   | 'string' | 'number' | 'boolean' | 'null' | 'array' | 'object'
   | 'oid' | 'date' | 'decimal128' | 'long';
 
-// 자동 EJSON 모드 감지의 신호로 쓰는 타입 — oid는 _id/REF에 이미 항상 쓰이므로 제외
-const EXTENDED_TYPES: JsonFieldType[] = ['date', 'decimal128', 'long'];
+// 자동 EJSON 모드 감지의 신호로 쓰는 타입 — oid도 MongoDB/EJSON 데이터임을 보여주는 신호이므로 포함
+const EXTENDED_TYPES: JsonFieldType[] = ['oid', 'date', 'decimal128', 'long'];
 
 export const getFieldType = (v: JsonValue): JsonFieldType => {
   if (v === null) return 'null';
@@ -26,7 +26,7 @@ export const getFieldType = (v: JsonValue): JsonFieldType => {
   return typeof v as 'string' | 'number' | 'boolean';
 };
 
-// node(및 그 하위 전체)에 Date/Decimal128/Long 중 하나라도 있으면 true —
+// node(및 그 하위 전체)에 ObjectId/Date/Decimal128/Long 중 하나라도 있으면 true —
 // 새 컬럼이 마운트될 때 EJSON 토글의 자동 기본값으로 쓴다.
 export const hasExtendedTypes = (node: JsonValue): boolean => {
   const type = getFieldType(node);
@@ -47,6 +47,8 @@ export const resolveAtPath = (doc: Document, path: string[]): JsonValue => {
   }
   return node;
 };
+
+export const isExpandableType = (t: JsonFieldType): boolean => t === 'object' || t === 'array';
 
 export const getEntries = (node: JsonValue): { key: string; value: JsonValue }[] => {
   if (node === null || typeof node !== 'object') return [];
