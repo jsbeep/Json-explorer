@@ -6,10 +6,10 @@ export function Footer() {
     <footer className="w-full border-t border-slate-200/60 px-6 py-8 sm:px-10 lg:px-20">
       <div className="mx-auto flex max-w-5xl flex-col items-center justify-between gap-4 sm:flex-row">
         <p className="text-xs text-slate-400">
-          © {new Date().getFullYear()} JSON Explorer & Editor. Built by jsb0315.
+          © {new Date().getFullYear()} JSON Explorer & Editor. Built by jsbeep.
         </p>
         <a
-          href="https://github.com/jsb0315/json-explorer"
+          href="https://github.com/jsbeep/json-explorer"
           target="_blank"
           rel="noreferrer"
           className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-emerald-300 hover:text-emerald-700"

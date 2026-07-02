@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://jsb0315.github.io/json-explorer/sitemap.xml
+Sitemap: https://jsbeep.github.io/json-explorer/sitemap.xml

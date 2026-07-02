@@ -29,7 +29,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "deploy": "gh-pages -d dist"
   },
-  "homepage": "https://jsb0315.github.io/Json-explorer/",
+  "homepage": "https://jsbeep.github.io/Json-explorer/",
   "peerDependencies": {
     "lucide-react": "^0.469.0",
     "react": "^18.3.1",

@@ -2,7 +2,7 @@
 # 🟢 MongoLive - JSON & EJSON Explorer
 > *Miller Column 기반 뷰어 & 인라인 에디터 — 일반 JSON은 언제든 탐색하고, MongoDB/Firebase에서 쓰는 EJSON(ObjectId, DBRef, Date, Decimal128, Long)은 모든 기능을 그대로 열어둔다*
 ---
-> ## https://jsb0315.github.io/Json-explorer/
+> ## https://jsbeep.github.io/Json-explorer/
 > ![video-1](gif-1.gif)
 
 ### 💡기능
@@ -17,7 +17,7 @@
 - ⚠️localstorage 사용이라 최대 약 5MB 사용가능
 
 ### 💡하고싶은거:
-- MongoDB 실시간 대시보드 https://github.com/jsb0315/Mongolive_legacy 프론트부터 리뉴얼 <br>
+- MongoDB 실시간 대시보드 https://github.com/jsbeep/Mongolive_legacy 프론트부터 리뉴얼 <br>
 - REF: [MongoDB Compass](https://www.mongodb.com/ko-kr/products/tools/compass), [Google Firestore 패널 뷰](https://firebase.google.com/docs/firestore/using-console?hl=ko)
 </aside>
 
