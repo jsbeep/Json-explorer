@@ -15,6 +15,7 @@ import {
   subscribeToChanges,
 } from '../services/mockAPI';
 import { getSnapshot } from '../services/mockStorage';
+import { collectionKey } from '../services/mockQuery';
 import { useToast, type ToastMessage } from './useToast';
 import { useUniqueOidRegistry } from './useUniqueOidRegistry';
 import type {
@@ -31,6 +32,7 @@ import type {
   MockSnapshot,
   NormalActivePath,
   ReferenceActivePath,
+  RefLocator,
 } from '../types/explorer';
 
 export type { ToastMessage };
@@ -44,6 +46,30 @@ export const MAX_VISIBLE_COLUMNS = 6;
 
 let pathIdCounter = 0;
 export const nextPathId = () => ++pathIdCounter;
+
+// 참조를 클릭했을 때, 그 대상 문서를 이미 보여주고 있는 컬럼이 경로 안에 있으면 그 인덱스.
+// 없으면 -1.
+//
+// 왜 필요한가 — 참조를 따라가다 보면 출발한 문서로 되돌아오는 경우가 흔하다
+// (users → submitted[0] → 그 글의 by → 다시 같은 users). 그때 컬럼을 하나 더 쌓으면
+// 같은 문서가 화면에 두 번 뜨고 경로가 무한히 길어진다. 이미 열려 있는 컬럼까지
+// 되감는 편이 "왔던 길로 돌아간다"는 실제 동작과 맞다.
+//
+// findIndex(=가장 앞)를 쓰는 게 중요하다. 한 문서를 파고들면 같은 ref를 공유하는
+// 컬럼이 여러 개 생기므로(projectionPath만 다름), 그 문서의 루트 컬럼으로 돌아가야 한다.
+const findOpenColumnForRef = (paths: ActivePath[], target: RefLocator): number =>
+  paths.findIndex((path) => {
+    if (path.kind === 'reference') {
+      if (target.kind === 'oid') return path.ref.kind === 'oid' && path.ref.oid === target.oid;
+      return path.ref.kind === 'field'
+        && path.ref.database === target.database
+        && path.ref.collection === target.collection
+        && path.ref.value === target.value;
+    }
+    // 참조가 아닌 일반 문서 컬럼도 같은 문서를 열고 있을 수 있다
+    if (target.kind === 'oid') return path.documentOid === target.oid;
+    return path.collectionName === target.collection && path.documentOid === String(target.value);
+  });
 
 // 필드 기반 참조(FK)가 같은 컬렉션 안에서 PK 값 중복으로 후보가 여러 개일 때 —
 // 조용히 하나를 골라 잘못 연결하지 않고 사용자에게 보여주고 고르게 한다.
@@ -100,7 +126,7 @@ export interface UseExplorerStateResult {
   dismissToast: () => void;
   undo: () => Promise<void>;
   refresh: () => Promise<void>;
-  subscribe: (collectionId: string) => () => void;
+  subscribe: (database: string, collection: string) => () => void;
 }
 
 // ── 훅 ───────────────────────────────────────────────────────────────────────
@@ -250,7 +276,9 @@ export function useExplorerState(): UseExplorerStateResult {
     }
     setIsLoading(true);
     try {
-      const docs = await getDocuments(name);
+      // DB로 한정해서 조회한다 — 이름만 넘기면 findCollection이 전체 DB를 훑어
+      // 다른 DB의 동명 컬렉션(users 등)을 먼저 집어온다
+      const docs = await getDocuments(collectionKey(activeDatabaseRef.current ?? '', name));
       activeCollectionRef.current = name;
       activeDocumentOidRef.current = null;
       setDocuments(docs);
@@ -370,6 +398,10 @@ export function useExplorerState(): UseExplorerStateResult {
       const doc = await getDocumentById(oid);
       setActivePaths((prev) => {
         const base = popIndex !== undefined ? prev.slice(0, popIndex + 1) : prev;
+        // 이미 이 문서를 열어둔 컬럼이 있으면 새로 쌓지 않고 거기까지 되감는다
+        const openIndex = findOpenColumnForRef(base, { kind: 'oid', oid });
+        if (openIndex >= 0) return base.slice(0, openIndex + 1);
+
         const chainIndex = base.filter((p) => p.kind === 'reference').length;
         const chainColor = CHAIN_COLORS[chainIndex % CHAIN_COLORS.length];
         const refPath: ReferenceActivePath = {
@@ -407,7 +439,7 @@ export function useExplorerState(): UseExplorerStateResult {
       const { databaseName, collectionName, collectionLabel, documentTitle } = info;
       const [cols, docs, doc] = await Promise.all([
         getCollections(databaseName),
-        getDocuments(collectionName),
+        getDocuments(collectionKey(databaseName, collectionName)),
         getFullDocumentById(oid),
       ]);
 
@@ -458,6 +490,17 @@ export function useExplorerState(): UseExplorerStateResult {
   const finalizePushFieldReference = useCallback((candidate: FieldReferenceCandidate, fieldKey: string, popIndex?: number) => {
     setActivePaths((prev) => {
       const base = popIndex !== undefined ? prev.slice(0, popIndex + 1) : prev;
+      // oid 참조와 같은 규칙 — 이미 열린 컬럼이 있으면 되감는다.
+      // ref.key를 '_id'로 고정해 저장하므로 대상도 documentId로 비교한다.
+      const openIndex = findOpenColumnForRef(base, {
+        kind: 'field',
+        database: candidate.database,
+        collection: candidate.collection,
+        key: '_id',
+        value: candidate.documentId,
+      });
+      if (openIndex >= 0) return base.slice(0, openIndex + 1);
+
       const chainIndex = base.filter((p) => p.kind === 'reference').length;
       const chainColor = CHAIN_COLORS[chainIndex % CHAIN_COLORS.length];
       const refPath: ReferenceActivePath = {
@@ -480,7 +523,7 @@ export function useExplorerState(): UseExplorerStateResult {
   const finalizeNavigateFieldReference = useCallback(async (candidate: FieldReferenceCandidate) => {
     const [cols, docs, doc] = await Promise.all([
       getCollections(candidate.database),
-      getDocuments(candidate.collection),
+      getDocuments(collectionKey(candidate.database, candidate.collection)),
       getFullDocumentByIdInCollection(candidate.database, candidate.collection, candidate.documentId),
     ]);
 
@@ -600,7 +643,7 @@ export function useExplorerState(): UseExplorerStateResult {
         setActivePaths((prev) => prev.slice(0, 1));
         setEditingId(null);
       } else if ('collection' in op && typeof op.collection === 'string' && activeCollectionRef.current === op.collection) {
-        const docs = await getDocuments(op.collection);
+        const docs = await getDocuments(collectionKey(activeDatabaseRef.current ?? '', op.collection));
         setDocuments(docs);
         // 문서 추가/삭제/수정으로 컬렉션 용량(sizeMb)·문서 수가 바뀌므로 컬렉션 메타도 같이 갱신
         if ('database' in op && typeof op.database === 'string') {
@@ -627,7 +670,7 @@ export function useExplorerState(): UseExplorerStateResult {
           const cols = await getCollections(activeDatabaseRef.current);
           setCollections(cols);
           if (activeCollectionRef.current) {
-            const docs = await getDocuments(activeCollectionRef.current);
+            const docs = await getDocuments(collectionKey(activeDatabaseRef.current, activeCollectionRef.current));
             setDocuments(docs);
           }
         }
@@ -756,11 +799,15 @@ export function useExplorerState(): UseExplorerStateResult {
     }
   }, [showToast]);
 
-  const subscribe = useCallback((collectionId: string) => {
-    return subscribeToChanges(collectionId, () => {
-      // ChangeStream 수신 시 자동 갱신
-      if (activeCollectionRef.current === collectionId) {
-        void getDocuments(collectionId).then(setDocuments);
+  // 실제 MongoDB ChangeStream을 붙일 자리의 mock — 아직 호출하는 컴포넌트는 없다.
+  // database/collection을 따로 받는다: 예전엔 컬렉션 이름 하나만 받아서 ① 이벤트 버스가
+  // 쓰는 `database.collection` 키와 형식이 어긋나 알림이 아예 안 오거나 ② 이름만
+  // 비교하는 바람에 다른 DB의 동명 컬렉션 변경에 반응하는 문제가 있었다.
+  const subscribe = useCallback((database: string, collection: string) => {
+    const key = collectionKey(database, collection);
+    return subscribeToChanges(key, () => {
+      if (activeDatabaseRef.current === database && activeCollectionRef.current === collection) {
+        void getDocuments(key).then(setDocuments);
       }
     });
   }, []);

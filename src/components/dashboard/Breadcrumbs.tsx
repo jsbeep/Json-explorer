@@ -417,7 +417,7 @@ export function Breadcrumbs({ breadcrumbs, onNavigate, openDocument, onCommitFie
               );
             })
           ) : (
-            <div className={styles.dropdownEmpty}>일치하는 키가 없습니다</div>
+            <div className={styles.dropdownEmpty}>No matching keys</div>
           )}
         </motion.div>,
         document.body,

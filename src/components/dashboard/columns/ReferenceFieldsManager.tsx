@@ -8,7 +8,7 @@ import type { CollectionSummary, MockMutationRequest } from '../../../types/expl
 const styles = {
   backdrop: 'fixed inset-0 flex items-center justify-center p-4 inherit',
   overlay: 'absolute inset-0 bg-slate-900/40 backdrop-blur-sm',
-  card: 'relative z-[10] w-full max-w-md bg-white rounded-2xl shadow-elevated p-6 flex flex-col gap-4',
+  card: 'relative z-[10] w-full max-w-lg bg-white rounded-2xl shadow-elevated p-6 flex flex-col gap-4',
   header: 'flex items-center gap-2',
   iconWrap: 'w-10 h-10 rounded-2xl bg-cyan-50 flex items-center justify-center shrink-0',
   title: 'text-base font-semibold text-slate-900',
@@ -19,9 +19,16 @@ const styles = {
   rowArrow: 'text-slate-300 shrink-0',
   rowTarget: 'font-mono text-cyan-600 truncate flex-1',
   removeBtn: 'p-1 rounded-lg text-slate-400 hover:bg-slate-200/70 hover:text-slate-600 transition-colors shrink-0',
-  addRow: 'flex flex-col gap-2 pt-2 border-t border-slate-100',
-  select: 'text-xs px-2 py-1.5 rounded-lg bg-slate-100/80 text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-400/60 focus:bg-white transition-all font-mono',
-  addBtn: 'flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium text-white bg-cyan-500 hover:bg-cyan-600 transition-colors disabled:opacity-40 disabled:pointer-events-none',
+  // 한 줄짜리 선언 행 — [Field key] → [Target collection.key] [+] 로 읽히게 배치한다.
+  // 위 목록의 "field → collection.key" 행과 같은 모양이라 무엇을 만드는지가 바로 보인다.
+  addRow: 'flex items-end gap-2 pt-3 border-t border-slate-100',
+  addGroup: 'flex flex-col gap-1 min-w-0',
+  addLabel: 'text-[10px] font-semibold uppercase tracking-wider text-slate-400 px-0.5',
+  addArrow: 'text-slate-300 shrink-0 pb-2 text-sm',
+  addTargetControls: 'flex items-center gap-1 min-w-0',
+  addDot: 'text-slate-300 shrink-0 text-xs',
+  select: 'w-full min-w-0 text-xs px-2 py-1.5 rounded-lg bg-slate-100/80 text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-400/60 focus:bg-white transition-all font-mono',
+  addBtn: 'shrink-0 flex items-center justify-center w-[30px] h-[30px] rounded-lg text-white bg-cyan-500 hover:bg-cyan-600 transition-colors disabled:opacity-40 disabled:pointer-events-none',
   closeBtn: 'self-end px-4 py-2 rounded-xl text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors',
 } as const;
 
@@ -108,7 +115,9 @@ export function ReferenceFieldsManager({
               </div>
               <div>
                 <p className={styles.title}>Manage references</p>
-                <p className={styles.message}>{collection}의 필드 → 다른 컬렉션 참조(FK) 선언</p>
+                <p className={styles.message}>
+                  <span className="font-mono text-slate-600">{collection}</span> field → another collection (FK)
+                </p>
               </div>
             </div>
 
@@ -128,52 +137,65 @@ export function ReferenceFieldsManager({
             )}
 
             <div className={styles.addRow}>
-              {availableSuggestions.length > 0 ? (
-                <select className={styles.select} value={newField} onChange={(e) => setNewField(e.target.value)}>
-                  <option value="">Field key…</option>
-                  {availableSuggestions.map((key) => (
-                    <option key={key} value={key}>{key}</option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  type="text"
-                  className={styles.select}
-                  placeholder="Field key (e.g. authorId)"
-                  value={newField}
-                  onChange={(e) => setNewField(e.target.value)}
-                />
-              )}
-              <select
-                className={styles.select}
-                value={newTargetCollection}
-                onChange={(e) => {
-                  const targetCollection = e.target.value;
-                  setNewTargetCollection(targetCollection);
-                  const target = collections.find((c) => c.name === targetCollection);
-                  setNewTargetKey(target?.primaryKey ?? '_id');
-                }}
-              >
-                <option value="">Target collection…</option>
-                {collections.map((c) => (
-                  <option key={c.name} value={c.name}>{c.label || c.name}</option>
-                ))}
-              </select>
-              <input
-                type="text"
-                className={styles.select}
-                placeholder="Target key (e.g. _id)"
-                value={newTargetKey}
-                onChange={(e) => setNewTargetKey(e.target.value)}
-              />
+              <div className={`${styles.addGroup} flex-1`}>
+                <span className={styles.addLabel}>Field key</span>
+                {availableSuggestions.length > 0 ? (
+                  <select className={styles.select} value={newField} onChange={(e) => setNewField(e.target.value)}>
+                    <option value="">Select…</option>
+                    {availableSuggestions.map((key) => (
+                      <option key={key} value={key}>{key}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    className={styles.select}
+                    placeholder="authorId"
+                    value={newField}
+                    onChange={(e) => setNewField(e.target.value)}
+                  />
+                )}
+              </div>
+
+              <span className={styles.addArrow}>→</span>
+
+              <div className={`${styles.addGroup} flex-[1.6]`}>
+                <span className={styles.addLabel}>Target</span>
+                <div className={styles.addTargetControls}>
+                  <select
+                    className={styles.select}
+                    value={newTargetCollection}
+                    onChange={(e) => {
+                      const targetCollection = e.target.value;
+                      setNewTargetCollection(targetCollection);
+                      const target = collections.find((c) => c.name === targetCollection);
+                      setNewTargetKey(target?.primaryKey ?? '_id');
+                    }}
+                  >
+                    <option value="">Collection…</option>
+                    {collections.map((c) => (
+                      <option key={c.name} value={c.name}>{c.label || c.name}</option>
+                    ))}
+                  </select>
+                  <span className={styles.addDot}>.</span>
+                  <input
+                    type="text"
+                    className={styles.select}
+                    placeholder="_id"
+                    value={newTargetKey}
+                    onChange={(e) => setNewTargetKey(e.target.value)}
+                  />
+                </div>
+              </div>
+
               <button
                 type="button"
                 className={styles.addBtn}
+                data-tt="Add reference"
                 disabled={!newField.trim() || !newTargetCollection || !newTargetKey.trim()}
                 onClick={() => void handleAdd()}
               >
-                <Plus size={14} />
-                Add
+                <Plus size={15} />
               </button>
             </div>
 

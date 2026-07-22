@@ -165,6 +165,7 @@ export function DocumentsColumn({
       <div className={styles.header}>
         {isEditingTitleKey ? (
           <>
+            <span className="text-[13px] font-semibold text-slate-700 truncate">Title Field</span>
             <input
               autoFocus
               type="text"
@@ -236,7 +237,7 @@ export function DocumentsColumn({
                 'flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200/70 text-slate-500 hover:text-slate-700 transition-colors shrink-0',
                 !activeCollectionName && 'opacity-40 pointer-events-none',
               )}
-              title="Select field to display as title"
+              data-tt="Title field — which field labels each document in this list"
               onClick={() => {
                 setTitleKeyInput(currentTitleKey ?? 'name');
                 setIsEditingTitleKey(true);
@@ -252,12 +253,12 @@ export function DocumentsColumn({
                 hasPrimaryKeyGaps ? 'bg-red-50 hover:bg-red-100 text-red-500 hover:text-red-600' : 'bg-slate-100 hover:bg-slate-200/70 text-slate-500 hover:text-slate-700',
                 (!activeCollectionName || isPrimaryKeyLocked) && 'opacity-40 pointer-events-none',
               )}
-              title={
+              data-tt={
                 isPrimaryKeyLocked
-                  ? 'OID 컬렉션은 PK가 _id로 고정됩니다'
+                  ? 'Primary key — locked to _id for ObjectId collections'
                   : hasPrimaryKeyGaps
-                    ? `일부 문서에 PK 필드(${currentPrimaryKey ?? '_id'})가 없습니다`
-                    : 'Select field to use as primary key'
+                    ? `Some documents are missing the primary key field (${currentPrimaryKey ?? '_id'})`
+                    : 'Primary key — the field other collections reference this one by'
               }
               onClick={() => {
                 if (isPrimaryKeyLocked) return;
@@ -277,7 +278,7 @@ export function DocumentsColumn({
                 'flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200/70 text-slate-500 hover:text-slate-700 transition-colors shrink-0',
                 !activeCollectionName && 'opacity-40 pointer-events-none',
               )}
-              title="Manage field-based references (FK)"
+              data-tt="References — declare which fields link to another collection, then click them to jump"
               onClick={() => setIsManagingRefs(true)}
             >
               <Link size={12} />
@@ -289,7 +290,7 @@ export function DocumentsColumn({
                 'relative p-1.5 rounded-lg transition-colors shrink-0',
                 isDocToolbarOpen || isDocFilterActive ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400 hover:bg-slate-200/70 hover:text-slate-600',
               )}
-              title="Filter / sort documents"
+              data-tt="Filter / sort documents in this collection"
               onClick={() => setIsDocToolbarOpen((v) => !v)}
             >
               {isDocFilterActive && !isDocToolbarOpen && (

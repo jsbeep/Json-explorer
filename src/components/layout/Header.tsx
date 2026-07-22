@@ -113,7 +113,7 @@ export function Header({
             className={styles.modeToggle}
             onClick={() => setMaxVisibleColumns(isTreeMode ? 3 : MIN_VISIBLE_COLUMNS)}
             aria-label={isTreeMode ? 'Switch to column mode' : 'Switch to tree mode'}
-            title={isTreeMode ? 'Tree mode — click for column mode' : 'Column mode — click for tree mode'}
+            data-tt={isTreeMode ? 'Tree mode — click to spread levels across columns' : 'Column mode — click to stack levels into one tree'}
           >
             {isTreeMode ? <ListTree size={14} /> : <Columns3 size={14} />}
             <span>{isTreeMode ? 'Tree' : 'Columns'}</span>

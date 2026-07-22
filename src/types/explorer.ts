@@ -200,6 +200,11 @@ export type MockMutationRequest =
             label: string;
             description: string;
             documents: Document[];
+            // 샘플 DB는 제목 필드/PK/참조 선언까지 미리 갖춘 상태로 들어온다 —
+            // 특히 JSON 샘플은 referenceFields가 없으면 스레드가 이어지지 않는다
+            titleKey?: string;
+            primaryKey?: string;
+            referenceFields?: Record<string, { targetCollection: string; targetKey: string }>;
           }
         >;
       };

@@ -10,21 +10,20 @@ type ChangeListener = (change: ChangeResponse) => void;
 // import하게 만들면(예: 별칭 경로 추가) 구독이 조용히 끊어지니 주의.
 const listeners = new Map<string, Set<ChangeListener>>();
 
-const uniqueStrings = (values: string[]): string[] => [...new Set(values)];
-
+// 구독 키는 항상 `database.collection` 한 가지다. 예전엔 컬렉션 이름만으로도 알림을
+// 뿌렸는데, 그러면 DB가 둘 이상일 때 다른 DB의 동명 컬렉션(users 등) 변경까지 받아버린다.
+// 실제 MongoDB ChangeStream도 DB/컬렉션을 특정해서 여는 것이라 이쪽이 맞다.
 export const emitChange = (databaseName: string, collectionName: string, change: ChangeResponse): void => {
-  for (const key of uniqueStrings([collectionName, collectionKey(databaseName, collectionName)])) {
-    const registered = listeners.get(key);
-    if (!registered) {
-      continue;
-    }
+  const registered = listeners.get(collectionKey(databaseName, collectionName));
+  if (!registered) {
+    return;
+  }
 
-    for (const listener of [...registered]) {
-      try {
-        listener(change);
-      } catch {
-        // Subscriber errors should not break the mock bus.
-      }
+  for (const listener of [...registered]) {
+    try {
+      listener(change);
+    } catch {
+      // Subscriber errors should not break the mock bus.
     }
   }
 };
@@ -53,6 +52,8 @@ export const emitDatabaseCollections = (databaseName: string, database: MockData
   }
 };
 
+// collectionId는 반드시 collectionKey(database, collection) 형식이어야 한다 —
+// 컬렉션 이름만 넘기면 emitChange가 찾는 키와 달라 알림이 오지 않는다.
 export const subscribeToChanges = (collectionId: string, callback: (change: ChangeResponse) => void): (() => void) => {
   const currentListeners = listeners.get(collectionId) ?? new Set<ChangeListener>();
   currentListeners.add(callback);

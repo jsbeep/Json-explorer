@@ -403,8 +403,15 @@ export function JsonLevelColumn({
     const isExpandable = type === 'object' || type === 'array';
     // _id가 아닌 단일 {$oid} 필드는, 이 앱이 직접 만든 '고유 oid' 레지스트리에 없으면 DBRef(참조)로 간주
     const isOidRef = type === 'oid' && !isId && !uniqueOids.has((value as { $oid: string }).$oid);
-    // 이 컬렉션에 FK로 선언된 필드 — plain string/number 값으로 다른 컬렉션 문서를 가리킴
-    const fieldRefConfig = !isId ? referenceFields[fieldKey] : undefined;
+    // 이 컬렉션에 FK로 선언된 필드 — plain string/number 값으로 다른 컬렉션 문서를 가리킴.
+    // 배열 안의 요소는 fieldKey가 인덱스("0","1"…)라 그대로는 매칭되지 않는다. 이때는
+    // 배열 자체의 키(projectionPath의 마지막 세그먼트)로 선언을 찾는다 — kids: [8834, 8840]
+    // 처럼 ID만 담은 배열의 각 요소가 참조로 동작해야 하기 때문.
+    const isArrayIndexKey = /^\d+$/.test(fieldKey);
+    const refConfigKey = isArrayIndexKey ? projectionPath[projectionPath.length - 1] : fieldKey;
+    const fieldRefConfig = !isId && refConfigKey ? referenceFields[refConfigKey] : undefined;
+    // 다음 컬럼에 붙일 이름 — 배열 요소면 "0"이 아니라 "kids[0]"으로 보여야 읽힌다
+    const refLabel = isArrayIndexKey ? `${refConfigKey}[${fieldKey}]` : fieldKey;
     const isFieldRef = !!fieldRefConfig && (type === 'string' || type === 'number');
     // _id만 수정 불가, REF로 분류된 oid도 키 이름/참조 대상을 수정할 수 있어야 함
     const isEditable = !isId;
@@ -415,7 +422,7 @@ export function JsonLevelColumn({
     // 근사 비교한다 — oid처럼 동기 비교는 불가능하지만 활성 표시는 정확도가 중요하지 않음
     const isActive = !nextActivePath ? false
       : isOidRef ? (nextActivePath.kind === 'reference' && nextActivePath.ref.kind === 'oid' && nextActivePath.ref.oid === (value as { $oid: string }).$oid)
-      : isFieldRef ? (nextActivePath.kind === 'reference' && nextActivePath.ref.kind === 'field' && nextActivePath.label === fieldKey)
+      : isFieldRef ? (nextActivePath.kind === 'reference' && nextActivePath.ref.kind === 'field' && nextActivePath.label === refLabel)
       : isExpandable ? (
           JSON.stringify(nextActivePath.projectionPath) === JSON.stringify([...projectionPath, fieldKey]) &&
           ((refOid || refField) ? nextActivePath.kind === 'reference' : nextActivePath.kind === 'normal')
@@ -628,7 +635,7 @@ export function JsonLevelColumn({
           }
           if (isFieldRef) {
             // 후보가 여러 개일 수 있어(중복 PK) 미리 dedup하지 않고 항상 다시 조회한다
-            void onPushReferenceByField(mutateDatabaseName ?? '', fieldRefConfig!.targetCollection, fieldRefConfig!.targetKey, value, fieldKey, myIndex >= 0 ? myIndex : undefined);
+            void onPushReferenceByField(mutateDatabaseName ?? '', fieldRefConfig!.targetCollection, fieldRefConfig!.targetKey, value, refLabel, myIndex >= 0 ? myIndex : undefined);
             return;
           }
           handlePushChild(fieldKey);
@@ -725,9 +732,9 @@ export function JsonLevelColumn({
             type="button"
             className="text-[10px] font-bold px-2 py-0.5 rounded-md text-white shrink-0 tracking-wide truncate max-w-[160px] cursor-pointer hover:opacity-80 transition-opacity"
             style={{ backgroundColor: chainColor }}
-            title={
-              refInfo ? `Go to ${refInfo.collectionLabel}/${refInfo.documentTitle}`
-              : refFieldInfo ? `Go to ${refFieldInfo.collectionLabel}/${refFieldInfo.documentTitle}`
+            data-tt={
+              refInfo ? `Referenced document — click to open ${refInfo.collectionLabel}/${refInfo.documentTitle}`
+              : refFieldInfo ? `Referenced document — click to open ${refFieldInfo.collectionLabel}/${refFieldInfo.documentTitle}`
               : undefined
             }
             onClick={() => {
@@ -746,7 +753,7 @@ export function JsonLevelColumn({
             'text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0 tracking-wide transition-colors',
             ejsonMode ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400',
           )}
-          title="Toggle EJSON field types (Date/Decimal128/Long) for Add Field"
+          data-tt="EJSON mode — offer Date / Decimal128 / Long as field types when adding or editing"
           onClick={() => setEjsonMode((v) => !v)}
         >
           EJSON
@@ -757,7 +764,7 @@ export function JsonLevelColumn({
             'relative p-1.5 rounded-lg transition-colors shrink-0',
             isFieldToolbarOpen || isFieldFilterActive ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400 hover:bg-slate-200/70 hover:text-slate-600',
           )}
-          title="Filter / sort fields"
+          data-tt="Filter / sort fields at this level"
           onClick={() => setIsFieldToolbarOpen((v) => !v)}
         >
           {isFieldFilterActive && !isFieldToolbarOpen && (

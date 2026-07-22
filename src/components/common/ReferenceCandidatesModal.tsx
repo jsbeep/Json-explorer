@@ -57,8 +57,8 @@ export function ReferenceCandidatesModal({ pending, onSelect, onCancel }: Refere
             </div>
 
             <div>
-              <p className={styles.title}>여러 문서가 일치합니다</p>
-              <p className={styles.message}>같은 값을 가진 문서가 {pending.candidates.length}개 있습니다. 이동할 문서를 고르세요.</p>
+              <p className={styles.title}>Multiple documents match</p>
+              <p className={styles.message}>{pending.candidates.length} documents share this value. Pick the one to open.</p>
             </div>
 
             <div className={styles.list}>

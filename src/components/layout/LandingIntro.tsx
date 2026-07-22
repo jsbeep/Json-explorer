@@ -3,10 +3,27 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { GitBranch, MousePointerClick, PencilLine, FlaskConical, X, Sparkles, Loader2 } from 'lucide-react';
 
+type SampleKind = 'ejson' | 'json';
+
 interface LandingIntroProps {
   onClose: () => void;
-  onLoadSample: () => Promise<void>;
+  onLoadSample: (kind: SampleKind) => Promise<void>;
 }
+
+// 같은 포럼 데이터를 두 가지 NoSQL 모델링으로 나눠 담은 샘플 — 어느 쪽 데이터를
+// 갖고 왔든 하나는 자기 얘기라는 걸 버튼 두 개로 바로 보여준다.
+const SAMPLES = [
+  {
+    kind: 'ejson' as const,
+    label: 'EJSON Sample',
+    hint: 'MongoDB style — embedded comment trees, ObjectId references',
+  },
+  {
+    kind: 'json' as const,
+    label: 'JSON Sample',
+    hint: 'Firebase / HN API style — plain ids, references declared as links',
+  },
+];
 
 const FEATURES = [
   {
@@ -39,17 +56,17 @@ const fadeUp = {
 };
 
 export function LandingIntro({ onClose, onLoadSample }: LandingIntroProps) {
-  const [isLoadingSample, setIsLoadingSample] = useState(false);
+  const [loadingKind, setLoadingKind] = useState<SampleKind | null>(null);
 
-  const handleLoadSample = async () => {
-    setIsLoadingSample(true);
+  const handleLoadSample = async (kind: SampleKind) => {
+    setLoadingKind(kind);
     try {
-      await onLoadSample();
+      await onLoadSample(kind);
       onClose(); // 성공하면 인트로를 닫아 바로 결과를 보여줌
     } catch {
       // mutate 훅이 이미 에러 토스트를 띄움 — 여기서는 모달 유지만
     } finally {
-      setIsLoadingSample(false);
+      setLoadingKind(null);
     }
   };
 
@@ -104,20 +121,32 @@ export function LandingIntro({ onClose, onLoadSample }: LandingIntroProps) {
           foundation for a future MongoDB real-time dashboard.
         </motion.p>
 
-        <motion.button
-          type="button"
+        <motion.div
           initial="hidden"
           whileInView="visible"
           viewport={{ once: true, amount: 0.6 }}
           variants={fadeUp}
           transition={{ duration: 0.5, delay: 0.15 }}
-          onClick={() => void handleLoadSample()}
-          disabled={isLoadingSample}
-          className="mt-6 inline-flex items-center gap-2 rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-soft transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="mt-6 flex flex-col items-center gap-2 sm:flex-row"
         >
-          {isLoadingSample ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-          Add Sample Dataset
-        </motion.button>
+          {SAMPLES.map(({ kind, label, hint }) => (
+            <button
+              key={kind}
+              type="button"
+              onClick={() => void handleLoadSample(kind)}
+              disabled={loadingKind !== null}
+              data-tt={hint}
+              className="inline-flex items-center gap-2 rounded-full border border-emerald-600 bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-soft transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loadingKind === kind ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+              {label}
+            </button>
+          ))}
+        </motion.div>
+
+        <p className="mt-3 max-w-xl text-xs leading-relaxed text-slate-400">
+          Same forum, two NoSQL models — comment threads embedded in each post, or split across collections and linked by id.
+        </p>
       </div>
 
       <div className="mx-auto mt-8 grid max-w-5xl grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">

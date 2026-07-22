@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useExplorerState } from '../hooks/useExplorerState';
-import { buildSampleDatabase } from '../data/sampleData';
+import { buildForumEjsonSample, buildForumJsonSample } from '../data/sampleData';
 import { Header } from '../components/layout/Header';
 import { LandingIntro } from '../components/layout/LandingIntro';
 import { Footer } from '../components/layout/Footer';
 import { Breadcrumbs } from '../components/dashboard/Breadcrumbs';
 import { MillerColumns } from '../components/dashboard/MillerColumns';
 import { ReferenceCandidatesModal } from '../components/common/ReferenceCandidatesModal';
+import { TooltipLayer } from '../components/common/TooltipLayer';
 import { SPRING_SOFT } from '../utils/motionPresets';
 
 // ── 스타일 ────────────────────────────────────────────────────────────────────
@@ -125,6 +126,9 @@ export default function ExplorerPage() {
         </div>
       </div>
 
+      {/* data-tt 속성이 달린 컨트롤의 툴팁 — 컬럼 밖으로 나가야 해서 body portal */}
+      <TooltipLayer />
+
       {/* 필드 기반 참조(FK) 매칭이 여러 개일 때 고르는 모달 */}
       <ReferenceCandidatesModal
         pending={referenceCandidates}
@@ -137,8 +141,12 @@ export default function ExplorerPage() {
         <div className="flex flex-col min-h-screen w-full">
           <LandingIntro
             onClose={() => setShowIntro(false)}
-            onLoadSample={async () => {
-              await mutate({ type: 'createDatabase', database: buildSampleDatabase(databases.map((d) => d.name)) });
+            onLoadSample={async (kind) => {
+              const existingNames = databases.map((d) => d.name);
+              const database = kind === 'ejson'
+                ? buildForumEjsonSample(existingNames)
+                : buildForumJsonSample(existingNames);
+              await mutate({ type: 'createDatabase', database });
             }}
           />
           <Footer />
