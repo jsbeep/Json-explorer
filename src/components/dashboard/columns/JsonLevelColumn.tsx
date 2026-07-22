@@ -513,11 +513,19 @@ export function JsonLevelColumn({
       }
       switch (type) {
         case 'string':
-          return <div className="flex items-center text-sm font-mono text-emerald-600 truncate">
-            <span>"</span>
-            <span>{String(value)}</span>
-            <span>"</span>
-          </div>;
+          // 긴 문자열은 한 줄로 잘라버리면 확인이 안 되므로, 자연 줄바꿈 + 높이 상한 +
+          // 내부 스크롤로 전체를 인라인에서 읽을 수 있게 한다(테두리 없이 목록에 녹아들게).
+          return (
+            <div
+              className="py-1 text-sm font-mono text-emerald-600 max-h-24 overflow-y-auto whitespace-pre-wrap break-words leading-snug"
+              title={String(value)}
+            >
+              {/* 따옴표는 select-none으로 빼서 드래그 선택·복사에 값만 들어가게 한다 */}
+              <span className="select-none">"</span>
+              {String(value)}
+              <span className="select-none">"</span>
+            </div>
+          );
         case 'number':
           return (
             <>
@@ -660,6 +668,7 @@ export function JsonLevelColumn({
             isHighlighted={isHighlighted}
             isActive={isActive}
             reduceMotion={reduceMotion}
+            reserveEditWidth={type === 'string' && !isFieldRef}
             onEdit={() => onSetEditingId(editorId)}
             onClick={handleClick}
           >
@@ -692,6 +701,7 @@ export function JsonLevelColumn({
         isHighlighted={isHighlighted}
         isActive={isActive}
         reduceMotion={reduceMotion}
+        reserveEditWidth={type === 'string' && !isFieldRef}
         onEdit={() => onSetEditingId(editorId)}
         onClick={handleClick}
       >

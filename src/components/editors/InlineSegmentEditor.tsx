@@ -49,6 +49,20 @@ const isoToLocalInput = (iso: string): string => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
+// String 값 편집 textarea: 내용에 맞춰 1줄에서 최대 4줄까지 자라고 그 이상은 스크롤.
+// 4줄 높이는 실제 computed lineHeight + 세로 패딩으로 계산해 폰트/패딩 변화에 강건하게.
+const MAX_STRING_EDITOR_LINES = 4;
+const autoResizeStringEditor = (el: HTMLTextAreaElement | null): void => {
+  if (!el) return;
+  el.style.height = 'auto';
+  const cs = getComputedStyle(el);
+  const line = parseFloat(cs.lineHeight) || 20;
+  const padY = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+  const max = line * MAX_STRING_EDITOR_LINES + padY;
+  el.style.height = `${Math.min(el.scrollHeight, max)}px`;
+  el.style.overflowY = el.scrollHeight > max ? 'auto' : 'hidden';
+};
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 export interface InlineSegmentEditorSubmitData {
@@ -196,6 +210,7 @@ export function InlineSegmentEditor({
   });
   const [isPending, setIsPending] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const stringInputRef = useRef<HTMLTextAreaElement>(null);
   const refPrefilledRef = useRef(false);
 
   // Import (collection/document 추가 시 붙여넣기/파일 업로드)
@@ -241,6 +256,12 @@ export function InlineSegmentEditor({
   useEffect(() => {
     keyInputRef.current?.focus();
   }, []);
+
+  // String 편집 textarea가 마운트되거나 타입이 String으로 바뀔 때, 초기값 길이에 맞춰
+  // 높이를 한 번 맞춰준다(이후 타이핑은 onChange에서 즉시 리사이즈).
+  useEffect(() => {
+    if (selectedType === 'String') autoResizeStringEditor(stringInputRef.current);
+  }, [selectedType]);
 
   useEffect(() => {
     if (mode === 'add') {
@@ -805,9 +826,24 @@ export function InlineSegmentEditor({
                   )}
                 </div>
               </div>
+            ) : selectedType === 'String' ? (
+              // 표시부와 동일하게 1줄 시작 → 내용 따라 최대 4줄 + 스크롤. Enter=제출,
+              // Shift+Enter=줄바꿈(여러 줄 문자열 입력용), Escape=취소.
+              <textarea
+                ref={stringInputRef}
+                rows={1}
+                className={cn(styles.valueInput, 'block resize-none leading-relaxed overflow-hidden')}
+                placeholder="Value"
+                value={rawValue}
+                onChange={(e) => { setRawValue(e.target.value); autoResizeStringEditor(e.currentTarget); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleSubmit(); }
+                  if (e.key === 'Escape') onCancel();
+                }}
+              />
             ) : (
               <input
-                type={selectedType === 'Number' ? 'number' : 'text'}
+                type="number"
                 className={styles.valueInput}
                 placeholder="Value"
                 value={rawValue}

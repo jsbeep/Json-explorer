@@ -3,8 +3,7 @@
     "allow": [
       "Bash(npx vite *)",
       "Bash(npx esbuild *)",
-      "Bash(python3 -)",
-      "Bash(node /tmp/claude-1000/-home-jsb-Github-json-explorer/1a5f4288-3413-4371-8757-a1e495d7d3b1/scratchpad/check.mjs)"
+      "Bash(python3 -)"
     ]
   }
 }

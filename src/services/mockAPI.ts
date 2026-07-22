@@ -20,7 +20,7 @@ import {
   type MockMutationRequest,
   type MockMutationResult,
 } from '../types/explorer';
-import { cloneCollectionMap, cloneDocument, ensureDocumentId } from './mockClone';
+import { cloneDocument, ensureDocumentId } from './mockClone';
 import {
   collectionKey,
   estimateCollectionSizeMb,
@@ -117,7 +117,10 @@ export const getDocuments = async (collectionId: string): Promise<DocumentSummar
 };
 
 export const mutateData = async (op: MockMutationRequest): Promise<MockMutationResult> => {
-  const snapshot = cloneCollectionMap(getSnapshot());
+  // getSnapshot()이 이미 문서까지 깊은 복제한 소유 스냅샷을 돌려주므로 이걸 그대로
+  // 제자리 수정한다 — 예전엔 여기에 cloneCollectionMap을 한 번 더 씌워 전 문서를
+  // 중복 복제했다(getSnapshot 복제 + cloneCollectionMap 복제).
+  const snapshot = getSnapshot();
   const now = Date.now();
 
   switch (op.type) {

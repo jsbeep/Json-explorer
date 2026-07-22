@@ -14,7 +14,7 @@ import {
   checkReference,
   subscribeToChanges,
 } from '../services/mockAPI';
-import { getSnapshot } from '../services/mockStorage';
+import { getSnapshot, StorageQuotaExceededError } from '../services/mockStorage';
 import { collectionKey } from '../services/mockQuery';
 import { useToast, type ToastMessage } from './useToast';
 import { useUniqueOidRegistry } from './useUniqueOidRegistry';
@@ -749,7 +749,7 @@ export function useExplorerState(): UseExplorerStateResult {
       showToast('Saved', 'success', true);
       return result;
     } catch (e) {
-      const msg = typeof e === 'string' ? e : 'Failed to save.';
+      const msg = typeof e === 'string' ? e : e instanceof StorageQuotaExceededError ? e.message : 'Failed to save.';
       showToast(msg, 'error');
       throw e;
     } finally {

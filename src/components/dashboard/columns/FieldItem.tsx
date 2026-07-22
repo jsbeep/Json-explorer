@@ -14,6 +14,10 @@ export interface FieldItemProps {
   isHighlighted: boolean;
   isActive?: boolean;
   reduceMotion?: boolean;
+  // 값이 여러 줄로 늘어나는 타입(문자열 등)에서, hover 시 edit 아이콘이 폭을 밀며
+  // 값이 줄었다 늘었다 rewrap되는 걸 막는다 — 펜슬 자리를 항상 예약해 값의 기본
+  // 너비를 hover 상태와 동일하게 고정하고, 아이콘은 opacity만 토글한다.
+  reserveEditWidth?: boolean;
   onEdit: () => void;
   onClick: (() => void) | null;
   children: ReactNode;
@@ -21,6 +25,7 @@ export interface FieldItemProps {
 
 export function FieldItem({
   fieldKey, isId, isExpandable, isEditable, isHighlighted, isActive = false, reduceMotion = false,
+  reserveEditWidth = false,
   onEdit, onClick, children,
 }: FieldItemProps) {
   const { hovered, hoverHandlers } = useHover();
@@ -53,8 +58,10 @@ export function FieldItem({
         )}
       </AnimatePresence>
 
+      {/* 부모는 items-center지만 key/컨트롤만 self-start로 올려, 값이 여러 줄로
+          길어질 때 문자열 첫 줄과 나란히 상단 정렬한다(한 줄일 땐 center와 동일). */}
       <span className={cn(
-        'text-[13px] py-1.5 font-mono font-medium shrink-0 w-[20%] truncate',
+        'text-[13px] py-1.5 font-mono font-medium shrink-0 w-[20%] truncate self-start',
         isActive ? 'text-emerald-700' : isId ? 'text-slate-400' : 'text-slate-500',
       )}>
         {fieldKey}
@@ -64,7 +71,7 @@ export function FieldItem({
         {children}
       </div>
 
-      <div className="flex items-center shrink-0">
+      <div className={cn("flex items-center shrink-0", reserveEditWidth && 'self-start')}>
         {isExpandable && (
           <m.span
             animate={{ x: hovered && isEditable ? 2 : 0 }}
@@ -74,7 +81,29 @@ export function FieldItem({
             <ChevronRight size={15} className={isActive ? 'text-emerald-400' : 'text-slate-300'} />
           </m.span>
         )}
-        {isEditable && (
+        {isEditable && (reserveEditWidth ? (
+          // 폭은 항상 예약(값 기본 너비 = hover 시 너비 → reflow 없음)하되, 슬라이드
+          // 인은 레이아웃에 영향 없는 x transform으로 재현한다(width 애니메이션과 달리
+          // 옆 값을 밀지 않음). 숨김 상태에선 클릭/포커스가 안 잡히게 pointer-events/tabIndex off.
+          <m.div
+            className="flex items-center"
+            animate={{ opacity: hovered ? 1 : 0, x: hovered ? 0 : 16 }}
+            transition={SPRING_HOVER}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className={cn(
+                'p-1.5 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors',
+                hovered ? '' : 'pointer-events-none',
+              )}
+              tabIndex={hovered ? 0 : -1}
+              onClick={onEdit}
+            >
+              <Pencil size={16} />
+            </button>
+          </m.div>
+        ) : (
           <AnimatePresence>
             {hovered && (
               <m.div
@@ -95,7 +124,7 @@ export function FieldItem({
               </m.div>
             )}
           </AnimatePresence>
-        )}
+        ))}
       </div>
     </m.div>
   );

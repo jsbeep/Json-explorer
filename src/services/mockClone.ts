@@ -5,9 +5,6 @@ import {
   type Document,
   type JsonObject,
   type JsonValue,
-  type MockCollectionRecord,
-  type MockDatabaseRecord,
-  type MockSnapshot,
 } from '../types/explorer';
 import { generateObjectId } from '../utils/objectId';
 
@@ -53,27 +50,4 @@ export const ensureDocumentId = (raw: JsonObject, forceOid = false): Document =>
     return { ...raw, _id: { $oid: generateObjectId() } } as Document;
   }
   return { ...raw } as Document;
-};
-
-export const cloneCollectionMap = (snapshot: MockSnapshot): MockSnapshot => {
-  const databases: Record<string, MockDatabaseRecord> = {};
-  for (const [databaseName, database] of Object.entries(snapshot.databases)) {
-    const collections: Record<string, MockCollectionRecord> = {};
-    for (const [collectionName, collection] of Object.entries(database.collections)) {
-      collections[collectionName] = {
-        ...collection,
-        documents: collection.documents.map((document) => cloneDocument(document)),
-      };
-    }
-
-    databases[databaseName] = {
-      ...database,
-      collections,
-    };
-  }
-
-  return {
-    ...snapshot,
-    databases,
-  };
 };

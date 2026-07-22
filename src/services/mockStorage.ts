@@ -96,6 +96,8 @@ const normalizeReferenceFields = (raw: unknown): Record<string, { targetCollecti
   return Object.keys(result).length > 0 ? result : undefined;
 };
 
+// 검증과 동시에 문서까지 깊은 복제한 '소유 그래프'를 반환한다 — 반환값은 입력과
+// 어떤 참조도 공유하지 않으므로 호출부에서 추가 복제가 필요 없다.
 const validateSnapshot = (candidate: unknown): MockSnapshot => {
   if (!isPlainObject(candidate)) {
     throw new Error('Invalid snapshot');
@@ -144,7 +146,10 @@ const validateSnapshot = (candidate: unknown): MockSnapshot => {
         if (!isPlainObject(document) || !isJsonValue(document)) {
           throw new Error('Invalid snapshot');
         }
-        return document as Document;
+        // 문서까지 깊은 복제해서 입력과 참조를 공유하지 않는 소유 그래프로 돌려준다 —
+        // 예전엔 여기서 원본 참조를 그대로 반환하고 setSnapshot 쪽에서 cloneSnapshot으로
+        // 한 번 더 복제했다. 그 복제를 이쪽으로 합쳐 순회를 한 번만 하도록 정리한 것.
+        return cloneDocument(document as Document);
       });
 
       normalizedCollections[collectionName] = {
@@ -189,10 +194,39 @@ const readStorage = (): Storage | undefined => {
   return candidate ?? undefined;
 };
 
+// 로컬스토리지 한도를 넘겨 저장에 실패했을 때 던진다 — 호출부에서 사용자에게 안내한다
+export class StorageQuotaExceededError extends Error {
+  constructor(message = 'Local storage is full. Delete unused databases and try again.') {
+    super(message);
+    this.name = 'StorageQuotaExceededError';
+  }
+}
+
+// 브라우저마다 코드/이름이 달라서 둘 다 본다 (Firefox: NS_ERROR_DOM_QUOTA_REACHED / code 1014)
+const isQuotaExceeded = (error: unknown): boolean => {
+  if (!(error instanceof Error)) return false;
+  const code = (error as DOMException).code;
+  return (
+    error.name === 'QuotaExceededError' ||
+    error.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+    code === 22 ||
+    code === 1014
+  );
+};
+
 const writeSnapshot = (snapshot: MockSnapshot): void => {
   const storage = readStorage();
-  if (storage) {
+  if (!storage) {
+    return;
+  }
+
+  try {
     storage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+  } catch (error) {
+    if (isQuotaExceeded(error)) {
+      throw new StorageQuotaExceededError();
+    }
+    throw error;
   }
 };
 
@@ -205,14 +239,23 @@ const loadInitialSnapshot = (): MockSnapshot => {
         return validateSnapshot(JSON.parse(raw) as unknown);
       } catch {
         const seed = createEmptyWorkspaceSnapshot();
-        storage.setItem(STORAGE_KEY, JSON.stringify(seed));
+        // 초기화 시점의 쓰기 실패로 앱이 죽지는 않게 한다 — 메모리 스냅샷으로 계속 진행
+        try {
+          writeSnapshot(seed);
+        } catch {
+          /* ignore */
+        }
         return seed;
       }
     }
   }
 
   const seed = createEmptyWorkspaceSnapshot();
-  writeSnapshot(seed);
+  try {
+    writeSnapshot(seed);
+  } catch {
+    /* ignore */
+  }
   return seed;
 };
 
@@ -220,10 +263,14 @@ let currentSnapshot = cloneSnapshot(loadInitialSnapshot());
 
 export const getSnapshot = (): MockSnapshot => cloneSnapshot(currentSnapshot);
 
+// 쓰기가 실패하면 메모리 스냅샷도 갱신하지 않는다 — 화면에는 저장된 것처럼 보이는데
+// 새로고침하면 사라지는 상태를 막기 위해 저장 성공 후에만 커밋한다
 export const setSnapshot = (snapshot: MockSnapshot): void => {
+  // validateSnapshot이 이미 문서까지 복제한 소유 그래프를 돌려주므로 추가 cloneSnapshot이
+  // 필요 없다 — currentSnapshot이 호출부 객체와 참조를 공유하지 않는다는 보장은 그대로다.
   const nextSnapshot = validateSnapshot(snapshot);
-  currentSnapshot = cloneSnapshot(nextSnapshot);
-  writeSnapshot(currentSnapshot);
+  writeSnapshot(nextSnapshot);
+  currentSnapshot = nextSnapshot;
 };
 
 export const exportSnapshot = (): string => JSON.stringify(currentSnapshot);
@@ -248,7 +295,10 @@ export const getUniqueOids = (): string[] => {
 
 export const setUniqueOids = (oids: string[]): void => {
   const storage = readStorage();
-  if (storage) {
+  if (!storage) return;
+  try {
     storage.setItem(UNIQUE_OIDS_KEY, JSON.stringify(oids));
+  } catch {
+    // oid 레지스트리는 분류 힌트일 뿐이라 저장 실패해도 진행한다(용량 초과는 스냅샷 쪽에서 알린다)
   }
 };
